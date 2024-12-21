@@ -243,7 +243,10 @@ async def save_audio(audio_file: UploadFile):
     # Generate S3 file name
     timestamp = int(datetime.now().timestamp())
     prefix = "audios"
-    s3_key = f"{prefix}/1_{timestamp}_{audio_file.filename}"
+    # user_id is by default 1
+    user_id = 1
+    s3_key = f"{prefix}/{user_id}_{timestamp}"
+    audio_id = f"{user_id}_{timestamp}"
 
     # Upload to S3
     s3.upload_fileobj(audio_file.file, S3_BUCKET, s3_key)
@@ -253,8 +256,8 @@ async def save_audio(audio_file: UploadFile):
 
     # Insert record into PostgreSQL
     cursor.execute(
-        "INSERT INTO audios (user_id, s3_object) VALUES (%s, %s) RETURNING audio_id",
-        (1, s3_url),
+        "INSERT INTO audios (user_id, audio_id, s3_object) VALUES (%s, %s, %s) RETURNING audio_id",
+        (user_id, audio_id, s3_url),
     )
     conn.commit()
 

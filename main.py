@@ -245,7 +245,7 @@ async def save_audio(audio_file: UploadFile):
     prefix = "audios"
     # user_id is by default 1
     user_id = 1
-    s3_key = f"{prefix}/{user_id}_{timestamp}"
+    s3_key = f"{prefix}/{user_id}_{timestamp}.wav"
     audio_id = f"{user_id}_{timestamp}"
 
     # Upload to S3

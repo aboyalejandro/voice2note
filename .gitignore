@@ -1,0 +1,5 @@
+venv
+__pycache___/
+.env
+.sesskey
+plan.md

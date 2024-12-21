@@ -24,6 +24,7 @@ conn = psycopg2.connect(
     host=os.getenv("DB_HOST"),
     port=os.getenv("DB_PORT"),
 )
+
 cursor = conn.cursor()
 
 # Initialize FastHTML app
@@ -248,7 +249,7 @@ async def save_audio(audio_file: UploadFile):
     s3.upload_fileobj(audio_file.file, S3_BUCKET, s3_key)
 
     # Generate S3 URL
-    s3_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{prefix}/{s3_key}"
+    s3_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{s3_key}"
 
     # Insert record into PostgreSQL
     cursor.execute(

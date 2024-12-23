@@ -33,52 +33,58 @@ app, rt = fast_app()
 
 @rt("/")
 def home():
-    return Titled(
-        Div(
-            "Modern Audio Recorder",
-            style="color: navy; font-size: 2rem; font-weight: bold; text-align: center;",
-        ),
-        Div(
+    return Html(
+        Head(Title("Voice2Note")),
+        Body(
             Div(
-                Button(
-                    I(cls="fas fa-microphone"),
-                    id="start",
-                    cls="record-btn",
-                    title="Start Recording",
-                ),
-                Button(
-                    I(cls="fas fa-stop-circle"),
-                    id="stop",
-                    cls="stop-btn",
-                    title="Stop Recording",
-                    disabled=True,
-                ),
-                cls="controls",
+                "Voice2Note",
+                style="color: navy; font-size: 2rem; font-weight: bold; text-align: center;",
+            ),
+            P(
+                "Find your transcribed notes effortlessly.",
+                style="color: navy; font-size: 1rem; text-align: center;",
             ),
             Div(
-                P(
-                    "Recording: 0:00",
-                    id="recordTimer",
-                    style="color: navy; font-size: 1.2rem; margin-top: 10px; display: none;",
+                Div(
+                    Button(
+                        I(cls="fas fa-microphone"),
+                        id="start",
+                        cls="record-btn",
+                        title="Start Recording",
+                    ),
+                    Button(
+                        I(cls="fas fa-stop-circle"),
+                        id="stop",
+                        cls="stop-btn",
+                        title="Stop Recording",
+                        disabled=True,
+                    ),
+                    cls="controls",
                 ),
-                Audio(id="audioPlayback", controls=True, cls="audio-player"),
-                P("", id="audioDuration", style="color: navy; margin-top: 10px;"),
-                cls="audio-wrapper",
-            ),
-            Div(
-                P(
-                    "Is the audio okay? You can save it or record a new one that will override the current one.",
-                    style="color: navy; margin-top: 20px;",
+                Div(
+                    P(
+                        "Recording: 0:00",
+                        id="recordTimer",
+                        style="color: navy; font-size: 1.2rem; margin-top: 10px; display: none;",
+                    ),
+                    Audio(id="audioPlayback", controls=True, cls="audio-player"),
+                    P("", id="audioDuration", style="color: navy; margin-top: 10px;"),
+                    cls="audio-wrapper",
                 ),
-                Button("Save Audio", id="save", cls="save-btn", disabled=True),
-                cls="save-container",
-            ),
-            Link(
-                rel="stylesheet",
-                href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
-            ),
-            Style(
-                """
+                Div(
+                    P(
+                        "Is the audio okay? You can save it or record a new one that will override the current one.",
+                        style="color: navy; margin-top: 20px;",
+                    ),
+                    Button("Save Audio", id="save", cls="save-btn", disabled=True),
+                    cls="save-container",
+                ),
+                Link(
+                    rel="stylesheet",
+                    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
+                ),
+                Style(
+                    """
                 body {
                     font-family: Arial, sans-serif;
                     text-align: center;
@@ -150,9 +156,9 @@ def home():
                     background-color: #004080;
                 }
                 """
-            ),
-            Script(
-                """
+                ),
+                Script(
+                    """
                 let mediaRecorder;
                 let audioChunks = [];
                 let recordInterval;
@@ -225,7 +231,7 @@ def home():
                     }).then(response => {
                         if (response.ok) {
                             response.json().then(data => {
-                                alert(`Audio saved with ID: ${data.audio_id}`);
+                                alert(`Audio saved succesfully!`);
                             });
                         } else {
                             alert('Failed to save audio.');
@@ -233,6 +239,7 @@ def home():
                     });
                 });
                 """
+                ),
             ),
         ),
     )
@@ -243,23 +250,24 @@ async def save_audio(audio_file: UploadFile):
     # Generate S3 file name
     timestamp = int(datetime.now().timestamp())
     prefix = "audios"
+    region = "us-east-1"
     # user_id is by default 1
     user_id = 1
     s3_key = f"{prefix}/{user_id}_{timestamp}.wav"
     audio_id = f"{user_id}_{timestamp}"
 
-    # Upload to S3
-    s3.upload_fileobj(audio_file.file, S3_BUCKET, s3_key)
-
     # Generate S3 URL
-    s3_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{s3_key}"
+    s3_url = f"https://{S3_BUCKET}.s3.{region}.amazonaws.com/{s3_key}"
 
     # Insert record into PostgreSQL
     cursor.execute(
-        "INSERT INTO audios (user_id, audio_id, s3_object) VALUES (%s, %s, %s) RETURNING audio_id",
+        "INSERT INTO audios (user_id, audio_id, s3_object_url) VALUES (%s, %s, %s) RETURNING audio_id",
         (user_id, audio_id, s3_url),
     )
     conn.commit()
+
+    # Upload to S3
+    s3.upload_fileobj(audio_file.file, S3_BUCKET, s3_key)
 
     return {"audio_id": cursor.fetchone()[0]}
 

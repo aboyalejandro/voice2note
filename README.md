@@ -1,9 +1,7 @@
 Run: 
 
 ```sh
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python3 main.py
+docker build -t voice2note .            
+docker run -p 5001:5001 -it voice2note  
 ```
-Go to http://127.0.0.1:5001/
+Go to http://localhost:5001/

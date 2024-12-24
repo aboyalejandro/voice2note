@@ -14,7 +14,8 @@ s3 = boto3.client(
     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
 )
-S3_BUCKET = "voice2note"
+AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
+AWS_REGION = os.getenv("AWS_REGION")
 
 # PostgreSQL Configuration
 conn = psycopg2.connect(
@@ -250,26 +251,25 @@ async def save_audio(audio_file: UploadFile):
     # Generate S3 file name
     timestamp = int(datetime.now().timestamp())
     prefix = "audios"
-    region = "us-east-1"
     # user_id is by default 1
     user_id = 1
     s3_key = f"{prefix}/{user_id}_{timestamp}.wav"
-    audio_id = f"{user_id}_{timestamp}"
+    audio_key = f"{user_id}_{timestamp}"
 
     # Generate S3 URL
-    s3_url = f"https://{S3_BUCKET}.s3.{region}.amazonaws.com/{s3_key}"
+    s3_url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
 
     # Insert record into PostgreSQL
     cursor.execute(
-        "INSERT INTO audios (user_id, audio_id, s3_object_url) VALUES (%s, %s, %s) RETURNING audio_id",
-        (user_id, audio_id, s3_url),
+        "INSERT INTO audios (audio_key, user_id, s3_object_url, created_at) VALUES (%s, %s, %s, %s) RETURNING audio_key",
+        (audio_key, user_id, s3_url, datetime.now()),
     )
     conn.commit()
 
     # Upload to S3
     s3.upload_fileobj(audio_file.file, S3_BUCKET, s3_key)
 
-    return {"audio_id": cursor.fetchone()[0]}
+    return {"audio_key": cursor.fetchone()[0]}
 
 
 serve()

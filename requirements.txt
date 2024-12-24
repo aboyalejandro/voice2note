@@ -2,3 +2,4 @@ python-fasthtml
 boto3 
 psycopg2-binary
 python-dotenv
+sqlite_minutils

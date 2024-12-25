@@ -52,6 +52,18 @@ def home():
             ),
             Div(
                 Div(
+                    Input(
+                        type="file",
+                        id="uploadInput",
+                        accept="audio/wav",
+                        style="display: none;",
+                    ),
+                    Button(
+                        I(cls="fas fa-file-audio"),
+                        id="upload",
+                        cls="upload-btn",
+                        title="Upload Audio",
+                    ),
                     Button(
                         I(cls="fas fa-microphone"),
                         id="start",
@@ -107,7 +119,7 @@ def home():
                 .controls {
                     margin: 20px 0;
                 }
-                .record-btn, .stop-btn {
+                .record-btn, .stop-btn, .upload-btn {
                     font-size: 40px;
                     background: none;
                     border: none;
@@ -118,6 +130,9 @@ def home():
                 }
                 .record-btn:hover {
                     color: red;
+                }
+                .upload-btn:hover {
+                    color: #004080;
                 }
                 .stop-btn:hover {
                     color: #ff8000;
@@ -169,6 +184,24 @@ def home():
                 let audioChunks = [];
                 let recordInterval;
 
+                document.getElementById('upload').addEventListener('click', () => {
+                    document.getElementById('uploadInput').click();
+                });
+
+                document.getElementById('uploadInput').addEventListener('change', (event) => {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const audioUrl = URL.createObjectURL(file);
+                        const audioPlayback = document.getElementById('audioPlayback');
+                        audioPlayback.src = audioUrl;
+                        
+                        window.audioBlob = file;
+                        window.audioType = 'uploaded';  // Set audio type for uploaded files
+                        
+                        document.getElementById('save').disabled = false;
+                    }
+                });
+
                 document.getElementById('start').addEventListener('click', () => {
                     navigator.mediaDevices.getUserMedia({ audio: true })
                         .then(stream => {
@@ -185,22 +218,19 @@ def home():
                                 const audioPlayback = document.getElementById('audioPlayback');
                                 audioPlayback.src = audioUrl;
 
-                                // Stop the timer and hide it
                                 clearInterval(recordInterval);
                                 document.getElementById('recordTimer').style.display = 'none';
 
-                                // Enable Save Button
                                 document.getElementById('save').disabled = false;
 
-                                // Store the audioBlob globally for saving later
                                 window.audioBlob = audioBlob;
+                                window.audioType = 'recorded';  // Set audio type for recorded files
                             };
 
                             mediaRecorder.start();
                             document.getElementById('start').disabled = true;
                             document.getElementById('stop').disabled = false;
 
-                            // Start the timer
                             const timerElement = document.getElementById('recordTimer');
                             timerElement.style.display = 'block';
                             let seconds = 0;
@@ -221,6 +251,8 @@ def home():
 
                 document.getElementById('save').addEventListener('click', () => {
                     const audioBlob = window.audioBlob;
+                    const audioType = window.audioType;
+                    
                     if (!audioBlob) {
                         alert('No audio to save!');
                         return;
@@ -230,6 +262,7 @@ def home():
                     const timestamp = Math.floor(Date.now() / 1000);
                     const filename = `recording_${timestamp}.wav`;
                     formData.append('audio_file', audioBlob, filename);
+                    formData.append('audio_type', audioType);  // Add audio type to form data
 
                     fetch('/save-audio', {
                         method: 'POST',
@@ -237,7 +270,7 @@ def home():
                     }).then(response => {
                         if (response.ok) {
                             response.json().then(data => {
-                                alert(`Audio saved succesfully!`);
+                                alert(`Audio saved successfully!`);
                             });
                         } else {
                             alert('Failed to save audio.');
@@ -252,7 +285,7 @@ def home():
 
 
 @rt("/save-audio")
-async def save_audio(audio_file: UploadFile):
+async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):
     try:
         # Generate S3 file name
         timestamp = int(datetime.now().timestamp())
@@ -264,13 +297,13 @@ async def save_audio(audio_file: UploadFile):
         # Generate S3 URL
         s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
         
-        logging.info(f"Saving audio file with key: {audio_key}")
+        logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
 
-        # Insert record into PostgreSQL
+        # Insert record into PostgreSQL with audio_type
         try:
             cursor.execute(
-                "INSERT INTO audios (audio_key, user_id, s3_object_url, created_at) VALUES (%s, %s, %s, %s) RETURNING audio_key",
-                (audio_key, user_id, s3_url, datetime.now()),
+                "INSERT INTO audios (audio_key, user_id, s3_object_url, audio_type, created_at ) VALUES (%s, %s, %s, %s, %s) RETURNING audio_key",
+                (audio_key, user_id, s3_url, audio_type, datetime.now() ),
             )
             conn.commit()
             logging.info(f"Database record created for audio_key: {audio_key}")

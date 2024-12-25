@@ -2,13 +2,10 @@
 CREATE TABLE users (
     user_id SERIAL PRIMARY KEY, 
     name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE, -
+    email VARCHAR(255) NOT NULL UNIQUE, 
     hashed_password VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-INSERT INTO users (name, email, hashed_password, created_at) 
-VALUES ('YO', 'yo@gmail.com', '3kjh21p1', CURRENT_TIMESTAMP);
 
 -- Audios Table
 CREATE TABLE audios (
@@ -16,6 +13,7 @@ CREATE TABLE audios (
     audio_key VARCHAR(255) NOT NULL UNIQUE, 
     user_id INTEGER NOT NULL,
     s3_object_url TEXT NOT NULL,
+    audio_type VARCHAR(8) NOT NULL CHECK (audio_type IN ('recorded', 'uploaded')),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id) 
 );

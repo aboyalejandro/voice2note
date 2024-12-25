@@ -323,14 +323,16 @@ def notes():
     notes = cursor.fetchall()
 
     note_cards = [
-        f'''<div class="note"> 
-            <div class="note-header"> 
-                <div class="note-date"> {note[0]} </div> 
-                <div class="note-title"> {note[1]} </div> 
-            </div> 
-                <br>
-                <div class="note-preview">{note[2]} </div> 
-            </div>'''
+        Div(
+            Div(
+                Div(note[0], cls="note-date"),
+                Div(note[1], cls="note-title"),
+                cls="note-header",
+            ),
+            Br(),
+            Div(note[2], cls="note-preview"),
+            cls="note",
+        )
         for note in notes
     ]
 
@@ -406,7 +408,7 @@ def notes():
             Div(
                 A("\u2190 Back", href="/", cls="back-button"),
                 Div(H1("Your Last Notes", cls="title")),
-                Div(note_cards, cls="container"),
+                Div(*note_cards, cls="container"),
             )
         ),
     )

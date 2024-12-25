@@ -23,7 +23,7 @@ DB_PORT = os.getenv("DB_PORT")
 # PROMPTS
 gpt_rol = "You are a voice note summarizing assistant."
 gpt_prompt_summary = "You are a voice note summarizing assistant that provides summaries of no more than 2 sentences with simple language, here's your text"
-gpt_prompt_title = "You are a voice note summarizing assistant that provides titles for note summaries of no more than 3 words of simple language, here's your text"
+gpt_prompt_title = "You are a voice note summarizing assistant that provides titles for note summaries of no more than 3 words of simple language and output the result without quotes, here's your text"
 
 # Lambda handler
 def lambda_handler(event, context): 

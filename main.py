@@ -306,95 +306,111 @@ def home():
 
 @rt("/notes")
 def notes():
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT 
-            audios.created_at,
-            audios.audio_type,
-            audios.audio_key,
+            TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             transcription->>'note_title' as note_title,
-            transcription->>'summary_text' as summary_text
+            transcription->>'summary_text' as note_summary
         FROM audios
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
         WHERE user_id = %s
         ORDER BY audios.created_at DESC
-    """, (1,))
-    
+        """,
+        (1,)
+    )
     notes = cursor.fetchall()
+
+    note_cards = [
+        f'''<div class="note"> 
+            <div class="note-header"> 
+                <div class="note-date"> {note[0]} </div> 
+                <div class="note-title"> {note[1]} </div> 
+            </div> 
+                <br>
+                <div class="note-preview">{note[2]} </div> 
+            </div>'''
+        for note in notes
+    ]
 
     return Html(
         Head(
             Title("Your Notes - Voice2Note"),
-            Style("""
+            Style(
+                """
                 body {
                     font-family: Arial, sans-serif;
+                    background-color: #f9f9f9;
+                    margin: 0;
+                    padding: 0;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                }
+                .container {
+                    width: 90%;
                     max-width: 800px;
-                    margin: 0 auto;
+                    background-color: #ffffff;
                     padding: 20px;
-                    background-color: #f5f5f5;
-                }
-                .back-btn {
-                    background: navy;
-                    color: white;
-                    padding: 10px 20px;
-                    border-radius: 5px;
-                    text-decoration: none;
-                    display: inline-block;
-                    margin-bottom: 30px;
-                }
-                .header {
-                    margin-bottom: 40px;
-                }
-                .header h1 {
-                    color: navy;
-                    font-size: 2.5em;
-                }
-                .note-card {
-                    background: white;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                     border-radius: 8px;
-                    padding: 20px;
-                    margin-bottom: 20px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 }
-                .note-card-header {
+                .back-button {
+                    display: inline-block;
+                    margin-bottom: 20px;
+                    font-size: 16px;
+                    color: #ffffff;
+                    background-color: navy;
+                    padding: 10px 15px;
+                    text-decoration: none;
+                    border-radius: 4px;
+                }
+                .back-button:hover {
+                    background-color: #004080;
+                }
+                .title {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: color: navy;;
+                    margin-bottom: 20px;
+                }
+                .note {
+                    display: flex;
+                    flex-direction: column;
+                    background-color: #f3f3f3;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-bottom: 15px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                }
+                .note-header {
                     display: flex;
                     justify-content: space-between;
-                    align-items: center;
                     margin-bottom: 10px;
-                }
-                .note-date {
-                    color: #666;
-                    font-size: 0.9em;
+                    font-weight: bold;
+                    color: #333;
                 }
                 .note-title {
-                    color: #333;
-                    font-weight: bold;
-                    text-decoration: none;
-                    font-size: 1.1em;
-                }
-                .note-type {
-                    background: #f0f0f0;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    font-size: 0.8em;
-                    color: #666;
+                    color: navy;
                 }
                 .note-preview {
                     color: #666;
-                    font-size: 0.95em;
-                    line-height: 1.5;
+                    font-size: 14px;
                 }
-            """)
+                """
+            ),
         ),
         Body(
-            A("← Back", href="/", cls="back-btn"),
             Div(
-                H1("Your Last Notes"),
-                cls="header"
-            ),
-            P('Notes will show up in here...')
-        )
+                A("\u2190 Back", href="/", cls="back-button"),
+                Div(H1("Your Last Notes", cls="title")),
+                Div(note_cards, cls="container"),
+            )
+        ),
     )
+
 
 @rt("/save-audio")
 async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):

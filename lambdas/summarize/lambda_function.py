@@ -23,7 +23,7 @@ DB_PORT = os.getenv("DB_PORT")
 # PROMPTS
 gpt_rol = "You are a voice note summarizing assistant."
 gpt_prompt_summary = "You are a voice note summarizing assistant that provides summaries of no more than 2 sentences with simple language, here's your text"
-gpt_prompt_title = "You are a voice note summarizing assistant that provides titles for note summaries of no more than 5 words of simple language, here's your text"
+gpt_prompt_title = "You are a voice note summarizing assistant that provides titles for note summaries of no more than 3 words of simple language, here's your text"
 
 # Lambda handler
 def lambda_handler(event, context): 
@@ -36,7 +36,7 @@ def lambda_handler(event, context):
 
         transcript_text = get_transcript(bucket_name, object_key, s3_client)
         summary_text = run_llm(transcript_text, gpt_prompt_summary, gpt_rol, open_ai_client)
-        note_title = run_llm(summary_text, gpt_prompt_summary, gpt_rol, open_ai_client)
+        note_title = run_llm(summary_text, gpt_prompt_title, gpt_rol, open_ai_client)
         
         audio_key = object_key.split('/')[-1].replace('.json', '')
         user_id = audio_key.split('_')[0]

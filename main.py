@@ -291,7 +291,7 @@ def home():
                     }).then(response => {
                         if (response.ok) {
                             response.json().then(data => {
-                                alert(`Audio saved successfully!`);
+                                alert(`Audio saved successfully! It will show up in the Notes page shortly.`);
                             });
                         } else {
                             alert('Failed to save audio.');
@@ -310,8 +310,8 @@ def notes():
         """
         SELECT 
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
-            transcription->>'note_title' as note_title,
-            transcription->>'summary_text' as note_summary
+            COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
+            COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary
         FROM audios
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
@@ -325,12 +325,11 @@ def notes():
     note_cards = [
         Div(
             Div(
-                Div(note[0], cls="note-date"),
-                Div(note[1], cls="note-title"),
+                P(note[0], cls="note-date"),
+                P(note[1], cls="note-title"),
                 cls="note-header",
             ),
-            Br(),
-            Div(note[2], cls="note-preview"),
+            P(note[2], cls="note-preview"),
             cls="note",
         )
         for note in notes
@@ -376,26 +375,27 @@ def notes():
                     font-size: 24px;
                     font-weight: bold;
                     color: color: navy;;
-                    margin-bottom: 20px;
+                    margin-bottom: 10px;
                 }
                 .note {
                     display: flex;
                     flex-direction: column;
                     background-color: #f3f3f3;
-                    padding: 15px;
+                    padding: 10px;
                     border-radius: 8px;
-                    margin-bottom: 15px;
+                    margin-bottom: 10px;
                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 }
                 .note-header {
                     display: flex;
-                    justify-content: space-between;
-                    margin-bottom: 10px;
-                    font-weight: bold;
+                    margin-bottom: 5px;
                     color: #333;
                 }
                 .note-title {
                     color: navy;
+                    margin-left: 5px;
+                    font-weight: bold;
+                    align-items: left;
                 }
                 .note-preview {
                     color: #666;

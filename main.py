@@ -4,6 +4,12 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 import psycopg2
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO
+)
 
 # Load environment variables
 load_dotenv()
@@ -17,6 +23,7 @@ s3 = boto3.client(
 AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
 AWS_REGION = os.getenv("AWS_REGION")
 
+
 # PostgreSQL Configuration
 conn = psycopg2.connect(
     dbname=os.getenv("DB_NAME"),
@@ -25,12 +32,10 @@ conn = psycopg2.connect(
     host=os.getenv("DB_HOST"),
     port=os.getenv("DB_PORT"),
 )
-
 cursor = conn.cursor()
 
 # Initialize FastHTML app
 app, rt = fast_app()
-
 
 @rt("/")
 def home():
@@ -248,28 +253,43 @@ def home():
 
 @rt("/save-audio")
 async def save_audio(audio_file: UploadFile):
-    # Generate S3 file name
-    timestamp = int(datetime.now().timestamp())
-    prefix = "audios"
-    # user_id is by default 1
-    user_id = 1
-    s3_key = f"{prefix}/{user_id}_{timestamp}.wav"
-    audio_key = f"{user_id}_{timestamp}"
+    try:
+        # Generate S3 file name
+        timestamp = int(datetime.now().timestamp())
+        prefix = "audios"
+        user_id = 1
+        s3_key = f"{prefix}/{user_id}_{timestamp}.wav"
+        audio_key = f"{user_id}_{timestamp}"
 
-    # Generate S3 URL
-    s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+        # Generate S3 URL
+        s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+        
+        logging.info(f"Saving audio file with key: {audio_key}")
 
-    # Insert record into PostgreSQL
-    cursor.execute(
-        "INSERT INTO audios (audio_key, user_id, s3_object_url, created_at) VALUES (%s, %s, %s, %s) RETURNING audio_key",
-        (audio_key, user_id, s3_url, datetime.now()),
-    )
-    conn.commit()
+        # Insert record into PostgreSQL
+        try:
+            cursor.execute(
+                "INSERT INTO audios (audio_key, user_id, s3_object_url, created_at) VALUES (%s, %s, %s, %s) RETURNING audio_key",
+                (audio_key, user_id, s3_url, datetime.now()),
+            )
+            conn.commit()
+            logging.info(f"Database record created for audio_key: {audio_key}")
+        except Exception as e:
+            logging.error(f"Database insertion failed for audio_key {audio_key}: {str(e)}")
+            raise
 
-    # Upload to S3
-    s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
+        # Upload to S3
+        try:
+            s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
+            logging.info(f"Audio file uploaded to S3: {s3_key}")
+        except Exception as e:
+            logging.error(f"S3 upload failed for key {s3_key}: {str(e)}")
+            raise
 
-    return {"audio_key": cursor.fetchone()[0]}
+        return {"audio_key": cursor.fetchone()[0]}
 
+    except Exception as e:
+        logging.error(f"Error in save_audio endpoint: {str(e)}")
+        raise
 
 serve()

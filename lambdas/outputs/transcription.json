@@ -1,0 +1,7 @@
+{
+  "user_id": "1",
+  "note_title": "This Spanish text is performing a test or check and it means \"one two three, testing\" in English.",
+  "summary_text": "The text is a simple phrase in Spanish testing or checking something. It translates to \"one two three, testing.\"",
+  "s3_object_url": "s3://voice2note/transcripts/processed/1_1735128857_1735128900.json",
+  "transcript_text": ["uno dos tres, probando."]
+}

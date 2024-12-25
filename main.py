@@ -94,7 +94,14 @@ def home():
                         "Is the audio okay? You can save it or record a new one that will override the current one.",
                         style="color: navy; margin-top: 20px;",
                     ),
-                    Button("Save Audio", id="save", cls="save-btn", disabled=True),
+                    Div(
+                        Button("Save Audio", id="save", cls="save-btn", disabled=True),
+                        A(
+                            Button("See Notes", cls="notes-btn"),
+                            href="/notes",
+                        ),
+                        style="display: flex; gap: 10px; justify-content: center;",
+                    ),
                     cls="save-container",
                 ),
                 Link(
@@ -176,6 +183,20 @@ def home():
                 .save-btn:hover:not([disabled]) {
                     background-color: #004080;
                 }
+
+                .notes-btn {
+                    font-size: 16px;
+                    padding: 10px 20px;
+                    background-color: navy;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                    }
+                .notes-btn:hover {
+                    background-color: #004080;
+                }
+
                 """
                 ),
                 Script(
@@ -283,6 +304,97 @@ def home():
         ),
     )
 
+@rt("/notes")
+def notes():
+    cursor.execute("""
+        SELECT 
+            audios.created_at,
+            audios.audio_type,
+            audios.audio_key,
+            transcription->>'note_title' as note_title,
+            transcription->>'summary_text' as summary_text
+        FROM audios
+        LEFT JOIN transcripts
+        ON audios.audio_key = transcripts.audio_key
+        WHERE user_id = %s
+        ORDER BY audios.created_at DESC
+    """, (1,))
+    
+    notes = cursor.fetchall()
+
+    return Html(
+        Head(
+            Title("Your Notes - Voice2Note"),
+            Style("""
+                body {
+                    font-family: Arial, sans-serif;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background-color: #f5f5f5;
+                }
+                .back-btn {
+                    background: navy;
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    text-decoration: none;
+                    display: inline-block;
+                    margin-bottom: 30px;
+                }
+                .header {
+                    margin-bottom: 40px;
+                }
+                .header h1 {
+                    color: navy;
+                    font-size: 2.5em;
+                }
+                .note-card {
+                    background: white;
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin-bottom: 20px;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
+                .note-card-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 10px;
+                }
+                .note-date {
+                    color: #666;
+                    font-size: 0.9em;
+                }
+                .note-title {
+                    color: #333;
+                    font-weight: bold;
+                    text-decoration: none;
+                    font-size: 1.1em;
+                }
+                .note-type {
+                    background: #f0f0f0;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-size: 0.8em;
+                    color: #666;
+                }
+                .note-preview {
+                    color: #666;
+                    font-size: 0.95em;
+                    line-height: 1.5;
+                }
+            """)
+        ),
+        Body(
+            A("← Back", href="/", cls="back-btn"),
+            Div(
+                H1("Your Last Notes"),
+                cls="header"
+            ),
+            P('Notes will show up in here...')
+        )
+    )
 
 @rt("/save-audio")
 async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):

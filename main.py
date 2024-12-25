@@ -257,7 +257,7 @@ async def save_audio(audio_file: UploadFile):
     audio_key = f"{user_id}_{timestamp}"
 
     # Generate S3 URL
-    s3_url = f"https://{S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+    s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
 
     # Insert record into PostgreSQL
     cursor.execute(
@@ -267,7 +267,7 @@ async def save_audio(audio_file: UploadFile):
     conn.commit()
 
     # Upload to S3
-    s3.upload_fileobj(audio_file.file, S3_BUCKET, s3_key)
+    s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
 
     return {"audio_key": cursor.fetchone()[0]}
 

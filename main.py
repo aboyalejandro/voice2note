@@ -302,7 +302,7 @@ def home():
 
 
 @rt("/notes")
-def notes(start_date: str = None, end_date: str = None):
+def notes(start_date: str = None, end_date: str = None, keyword: str = None):
     # Base query
     query = """
         SELECT 
@@ -328,13 +328,18 @@ def notes(start_date: str = None, end_date: str = None):
         query += " AND DATE(audios.created_at) <= %s"
         query_params.append(end_date)
 
+    # Add keyword search if provided
+    if keyword:
+        query += " AND transcription->>'transcript_text' ILIKE %s"
+        query_params.append(f"%{keyword}%")
+
     query += " ORDER BY audios.created_at DESC"
 
     cursor.execute(query, query_params)
     notes = cursor.fetchall()
 
-    # Create date search form
-    date_search = Div(
+    # Create search form with both date and keyword fields
+    search_form = Div(
         Form(
             Div(
                 Div(
@@ -357,12 +362,25 @@ def notes(start_date: str = None, end_date: str = None):
                     ),
                     cls="date-field",
                 ),
+                Div(
+                    Label("Search:", cls="keyword-label"),
+                    Input(
+                        type="text",
+                        name="keyword",
+                        cls="keyword-input",
+                        value=keyword or "",
+                        placeholder="Search in transcripts...",
+                    ),
+                    cls="keyword-field",
+                ),
                 Button("Search", type="submit", cls="search-btn"),
-                Button("Clear", type="button", cls="clear-btn", onclick="clearDates()"),
-                cls="date-search-container",
+                Button(
+                    "Clear", type="button", cls="clear-btn", onclick="clearSearch()"
+                ),
+                cls="search-container",
             ),
             method="GET",
-            cls="date-form",
+            cls="search-form",
         ),
         cls="search-wrapper",
     )
@@ -442,7 +460,7 @@ def notes(start_date: str = None, end_date: str = None):
                     padding: 10px;
                     border-radius: 8px;
                     margin-bottom: 10px;
-                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.0.1);
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 }
                 .note-header {
                     display: flex;
@@ -483,14 +501,16 @@ def notes(start_date: str = None, end_date: str = None):
                 .view-btn:hover {
                     background-color: #004080;
                 }
+                
+                /* Search form styles */
                 .search-wrapper {
                     margin-bottom: 20px;
                     width: 100%;
                 }
-                .date-form {
+                .search-form {
                     width: 100%;
                 }
-                .date-search-container {
+                .search-container {
                     display: flex;
                     gap: 15px;
                     align-items: center;
@@ -499,6 +519,7 @@ def notes(start_date: str = None, end_date: str = None):
                     background-color: #f3f3f3;
                     border-radius: 8px;
                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    flex-wrap: wrap;
                 }
                 .date-field {
                     display: flex;
@@ -508,12 +529,35 @@ def notes(start_date: str = None, end_date: str = None):
                 .date-label {
                     color: navy;
                     font-weight: 500;
+                    white-space: nowrap;
                 }
                 .date-input {
                     padding: 8px;
                     border: 1px solid navy;
                     border-radius: 4px;
                     color: #333;
+                }
+                .keyword-field {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    flex-grow: 1;
+                }
+                .keyword-label {
+                    color: navy;
+                    font-weight: 500;
+                    white-space: nowrap;
+                }
+                .keyword-input {
+                    padding: 8px;
+                    border: 1px solid navy;
+                    border-radius: 4px;
+                    color: #333;
+                    width: 100%;
+                    min-width: 200px;
+                }
+                .keyword-input::placeholder {
+                    color: #999;
                 }
                 .search-btn {
                     padding: 8px 16px;
@@ -522,6 +566,7 @@ def notes(start_date: str = None, end_date: str = None):
                     border: none;
                     border-radius: 4px;
                     cursor: pointer;
+                    white-space: nowrap;
                 }
                 .search-btn:hover {
                     background-color: #004080;
@@ -533,17 +578,31 @@ def notes(start_date: str = None, end_date: str = None):
                     border: none;
                     border-radius: 4px;
                     cursor: pointer;
+                    white-space: nowrap;
                 }
                 .clear-btn:hover {
                     background-color: #555;
+                }
+                @media (max-width: 768px) {
+                    .search-container {
+                        flex-direction: column;
+                        align-items: stretch;
+                    }
+                    .date-field, .keyword-field {
+                        width: 100%;
+                    }
+                    .search-btn, .clear-btn {
+                        width: 100%;
+                    }
                 }
                 """
             ),
             Script(
                 """
-                function clearDates() {
+                function clearSearch() {
                     document.querySelector('input[name="start_date"]').value = '';
                     document.querySelector('input[name="end_date"]').value = '';
+                    document.querySelector('input[name="keyword"]').value = '';
                     window.location.href = '/notes';
                 }
                 """
@@ -553,7 +612,7 @@ def notes(start_date: str = None, end_date: str = None):
             Div(
                 A("\u2190 Back", href="/", cls="back-button"),
                 Div(H1("Your Last Notes", cls="title")),
-                Div(date_search, *note_cards, cls="container"),
+                Div(search_form, *note_cards, cls="container"),
             )
         ),
     )

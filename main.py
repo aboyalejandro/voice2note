@@ -7,9 +7,7 @@ import psycopg2
 import logging
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO
-)
+logging.basicConfig(level=logging.INFO)
 
 # Load environment variables
 load_dotenv()
@@ -36,6 +34,7 @@ cursor = conn.cursor()
 
 # Initialize FastHTML app
 app, rt = fast_app()
+
 
 @rt("/")
 def home():
@@ -304,11 +303,13 @@ def home():
         ),
     )
 
+
 @rt("/notes")
 def notes():
     cursor.execute(
         """
         SELECT 
+            audios.audio_key,
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
             COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary
@@ -318,18 +319,28 @@ def notes():
         WHERE user_id = %s
         ORDER BY audios.created_at DESC
         """,
-        (1,)
+        (1,),
     )
     notes = cursor.fetchall()
 
     note_cards = [
         Div(
             Div(
-                P(note[0], cls="note-date"),
-                P(note[1], cls="note-title"),
+                Div(
+                    P(note[1], cls="note-date"),
+                    P(note[2], cls="note-title"),
+                    cls="note-info",
+                ),
                 cls="note-header",
             ),
-            P(note[2], cls="note-preview"),
+            P(note[3], cls="note-preview"),
+            Div(
+                A(
+                    Button("View Note", cls="view-btn"),
+                    href=f"/note_{note[0]}",
+                ),
+                style="text-align: right; margin-top: 10px;",
+            ),
             cls="note",
         )
         for note in notes
@@ -357,9 +368,12 @@ def notes():
                     padding: 20px;
                     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                     border-radius: 8px;
+                    overflow-y: auto;
+                    max-height: 90vh;
                 }
                 .back-button {
                     display: inline-block;
+                    margin-top: 40px;
                     margin-bottom: 20px;
                     font-size: 16px;
                     color: #ffffff;
@@ -375,7 +389,7 @@ def notes():
                     font-size: 24px;
                     font-weight: bold;
                     color: color: navy;;
-                    margin-bottom: 10px;
+                    margin-bottom: 15px;
                 }
                 .note {
                     display: flex;
@@ -401,6 +415,18 @@ def notes():
                     color: #666;
                     font-size: 14px;
                 }
+                .view-btn {
+                    font-size: 14px;
+                    padding: 8px 16px;
+                    background-color: navy;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+                .view-btn:hover {
+                    background-color: #004080;
+                }
                 """
             ),
         ),
@@ -409,6 +435,134 @@ def notes():
                 A("\u2190 Back", href="/", cls="back-button"),
                 Div(H1("Your Last Notes", cls="title")),
                 Div(*note_cards, cls="container"),
+            )
+        ),
+    )
+
+
+@rt("/note_{audio_key}")
+def note_detail(audio_key: str):
+    cursor.execute(
+        """
+        SELECT 
+            audios.audio_key,
+            TO_CHAR(audios.created_at, 'MM/DD') as note_date,
+            COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
+            COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription
+        FROM audios
+        LEFT JOIN transcripts
+        ON audios.audio_key = transcripts.audio_key
+        WHERE audios.audio_key = %s
+        """,
+        (audio_key,),
+    )
+    note = cursor.fetchone()
+
+    return Html(
+        Head(
+            Title("Note Details - Voice2Note"),
+            Style(
+                """
+                body {
+                    font-family: Arial, sans-serif;
+                    background-color: #f9f9f9;
+                    margin: 0;
+                    padding: 0;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                }
+                .container {
+                    width: 90%;
+                    max-width: 800px;
+                    background-color: #ffffff;
+                    padding: 20px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    border-radius: 8px;
+                    overflow-y: auto;
+                    max-height: 90vh;
+                }
+                .back-button {
+                    display: inline-block;
+                    margin-top: 40px;
+                    margin-bottom: 20px;
+                    font-size: 16px;
+                    color: #ffffff;
+                    background-color: navy;
+                    padding: 10px 15px;
+                    text-decoration: none;
+                    border-radius: 4px;
+                }
+                .back-button:hover {
+                    background-color: #004080;
+                }
+                .title {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: navy;
+                    margin-bottom: 15px;
+                }
+                .note {
+                    display: flex;
+                    flex-direction: column;
+                    background-color: #f3f3f3;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 10px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                }
+                .note-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 15px;
+                    color: #333;
+                    width: 100%;
+                }
+                .note-info {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+                .note-title {
+                    color: navy;
+                    font-weight: bold;
+                    font-size: 1.2em;
+                    margin: 0;
+                }
+                .note-date {
+                    color: #666;
+                    font-size: 0.9em;
+                    margin: 0;
+                }
+                .note-transcription {
+                    color: #333;
+                    font-size: 16px;
+                    line-height: 1.6;
+                    white-space: pre-wrap;
+                }
+                """
+            ),
+        ),
+        Body(
+            Div(
+                A("\u2190 Back to Notes", href="/notes", cls="back-button"),
+                Div(
+                    Div(
+                        Div(
+                            Div(
+                                P(note[1], cls="note-date"),
+                                P(note[2], cls="note-title"),
+                                cls="note-info",
+                            ),
+                            cls="note-header",
+                        ),
+                        P(note[3], cls="note-transcription"),
+                        cls="note",
+                    ),
+                    cls="container",
+                ),
             )
         ),
     )
@@ -426,19 +580,21 @@ async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):
 
         # Generate S3 URL
         s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
-        
+
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
 
         # Insert record into PostgreSQL with audio_type
         try:
             cursor.execute(
                 "INSERT INTO audios (audio_key, user_id, s3_object_url, audio_type, created_at ) VALUES (%s, %s, %s, %s, %s) RETURNING audio_key",
-                (audio_key, user_id, s3_url, audio_type, datetime.now() ),
+                (audio_key, user_id, s3_url, audio_type, datetime.now()),
             )
             conn.commit()
             logging.info(f"Database record created for audio_key: {audio_key}")
         except Exception as e:
-            logging.error(f"Database insertion failed for audio_key {audio_key}: {str(e)}")
+            logging.error(
+                f"Database insertion failed for audio_key {audio_key}: {str(e)}"
+            )
             raise
 
         # Upload to S3
@@ -454,5 +610,6 @@ async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):
     except Exception as e:
         logging.error(f"Error in save_audio endpoint: {str(e)}")
         raise
+
 
 serve()

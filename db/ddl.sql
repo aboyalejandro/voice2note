@@ -15,6 +15,7 @@ CREATE TABLE audios (
     audio_type VARCHAR(8) NOT NULL CHECK (audio_type IN ('recorded', 'uploaded')),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP,
+    metadata JSONB,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );
 

@@ -314,8 +314,9 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
         WHERE user_id = %s
+        AND audios.deleted_at IS NULL
     """
-    query_params = [1]  # Base parameter (user_id)
+    query_params = [1]
 
     # Add date filtering if dates are provided
     if start_date and end_date:
@@ -393,6 +394,11 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
                     P(note[2], cls="note-title"),
                     cls="note-info",
                 ),
+                Button(
+                    I(cls="fas fa-trash"),
+                    cls="delete-btn",
+                    onclick=f"deleteNote('{note[0]}')",
+                ),
                 cls="note-header",
             ),
             P(note[3], cls="note-preview"),
@@ -411,6 +417,10 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
     return Html(
         Head(
             Title("Your Notes - Voice2Note"),
+            Link(
+                rel="stylesheet",
+                href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
+            ),
             Style(
                 """
                 body {
@@ -595,6 +605,19 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
                         width: 100%;
                     }
                 }
+                .delete-btn {
+                    background: none;
+                    border: none;
+                    color: #dc3545;
+                    cursor: pointer;
+                    padding: 5px;
+                    font-size: 1.1em;
+                    opacity: 0.7;
+                    transition: opacity 0.2s;
+                }
+                .delete-btn:hover {
+                    opacity: 1;
+                }
                 """
             ),
             Script(
@@ -605,6 +628,29 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
                     document.querySelector('input[name="keyword"]').value = '';
                     window.location.href = '/notes';
                 }
+
+                function deleteNote(audioKey) {
+                if (confirm('Are you sure you want to delete this note?')) {
+                    fetch(`/delete-note/${audioKey}`, {
+                        method: 'POST'
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            alert('Note deleted successfully!');
+                            // In /notes endpoint
+                            window.location.reload();
+                            // In /note_{audio_key} endpoint
+                            // window.location.href = '/notes';
+                        } else {
+                            alert('Failed to delete note.');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error deleting note.');
+                    });
+                }
+            }
                 """
             ),
         ),
@@ -631,14 +677,22 @@ def note_detail(audio_key: str):
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
         WHERE audios.audio_key = %s
+        AND audios.deleted_at IS NULL
         """,
         (audio_key,),
     )
     note = cursor.fetchone()
 
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+
     return Html(
         Head(
             Title("Note Details - Voice2Note"),
+            Link(
+                rel="stylesheet",
+                href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
+            ),
             Style(
                 """
                 body {
@@ -720,6 +774,41 @@ def note_detail(audio_key: str):
                     line-height: 1.6;
                     white-space: pre-wrap;
                 }
+                .delete-btn {
+                    background: none;
+                    border: none;
+                    color: #dc3545;
+                    cursor: pointer;
+                    padding: 5px;
+                    font-size: 1.1em;
+                    opacity: 0.7;
+                    transition: opacity 0.2s;
+                }
+                .delete-btn:hover {
+                    opacity: 1;
+                }
+                """
+            ),
+            Script(
+                """
+                function deleteNote(audioKey) {
+                    if (confirm('Are you sure you want to delete this note?')) {
+                        fetch(`/delete-note/${audioKey}`, {
+                            method: 'POST'
+                        })
+                        .then(response => {
+                            if (response.ok) {
+                                window.location.href = '/notes';
+                            } else {
+                                alert('Failed to delete note.');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Error deleting note.');
+                        });
+                    }
+                }
                 """
             ),
         ),
@@ -733,6 +822,11 @@ def note_detail(audio_key: str):
                                 P(note[1], cls="note-date"),
                                 P(note[2], cls="note-title"),
                                 cls="note-info",
+                            ),
+                            Button(
+                                I(cls="fas fa-trash"),
+                                cls="delete-btn",
+                                onclick=f"deleteNote('{note[0]}')",
                             ),
                             cls="note-header",
                         ),
@@ -788,6 +882,31 @@ async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):
     except Exception as e:
         logging.error(f"Error in save_audio endpoint: {str(e)}")
         raise
+
+
+@rt("/delete-note/{audio_key}")
+async def delete_note(audio_key: str):
+    try:
+        # Update both tables with current timestamp
+        cursor.execute(
+            """
+            WITH audio_update AS (
+                UPDATE audios 
+                SET deleted_at = CURRENT_TIMESTAMP 
+                WHERE audio_key = %s
+            )
+            UPDATE transcripts 
+            SET deleted_at = CURRENT_TIMESTAMP 
+            WHERE audio_key = %s;
+            """,
+            (audio_key, audio_key),
+        )
+        conn.commit()
+        return {"success": True}
+    except Exception as e:
+        logging.error(f"Error deleting note: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Error deleting note")
 
 
 serve()

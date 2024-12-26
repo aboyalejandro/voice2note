@@ -5,6 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import psycopg2
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -197,6 +198,7 @@ def home():
                 ),
                 Script(
                     """
+                    let recordingDuration = 0;
                     let mediaRecorder;
                     let audioChunks = [];
                     let recordInterval;
@@ -212,89 +214,94 @@ def home():
                             const audioPlayback = document.getElementById('audioPlayback');
                             audioPlayback.src = audioUrl;
                             
-                            window.audioBlob = file;
-                            window.audioType = 'uploaded';
-                            
-                            document.getElementById('save').disabled = false;
+                            audioPlayback.onloadedmetadata = () => {
+                                window.audioBlob = file;
+                                window.audioType = 'uploaded';
+                                window.audioDuration = isFinite(audioPlayback.duration) ? audioPlayback.duration : 0;
+                                document.getElementById('save').disabled = false;
+                            };
                         }
                     });
 
                     document.getElementById('start').addEventListener('click', () => {
-                        navigator.mediaDevices.getUserMedia({ audio: true })
-                            .then(stream => {
-                                mediaRecorder = new MediaRecorder(stream);
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(stream => {
+                            mediaRecorder = new MediaRecorder(stream);
+                            recordingDuration = 0;
 
-                                mediaRecorder.ondataavailable = event => {
-                                    audioChunks.push(event.data);
-                                };
+                            mediaRecorder.ondataavailable = event => {
+                                audioChunks.push(event.data);
+                            };
 
-                                mediaRecorder.onstop = () => {
-                                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                                    audioChunks = [];
-                                    const audioUrl = URL.createObjectURL(audioBlob);
-                                    const audioPlayback = document.getElementById('audioPlayback');
-                                    audioPlayback.src = audioUrl;
+                            mediaRecorder.onstop = () => {
+                                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                                audioChunks = [];
+                                const audioUrl = URL.createObjectURL(audioBlob);
+                                const audioPlayback = document.getElementById('audioPlayback');
+                                audioPlayback.src = audioUrl;
 
-                                    clearInterval(recordInterval);
-                                    document.getElementById('recordTimer').style.display = 'none';
+                                clearInterval(recordInterval);
+                                document.getElementById('recordTimer').style.display = 'none';
+                                
+                                window.audioBlob = audioBlob;
+                                window.audioType = 'recorded';
+                                window.audioDuration = recordingDuration;
+                                document.getElementById('save').disabled = false;
+                            };
 
-                                    document.getElementById('save').disabled = false;
+                            mediaRecorder.start();
+                            document.getElementById('start').disabled = true;
+                            document.getElementById('stop').disabled = false;
 
-                                    window.audioBlob = audioBlob;
-                                    window.audioType = 'recorded';
-                                };
-
-                                mediaRecorder.start();
-                                document.getElementById('start').disabled = true;
-                                document.getElementById('stop').disabled = false;
-
-                                const timerElement = document.getElementById('recordTimer');
-                                timerElement.style.display = 'block';
-                                let seconds = 0;
-                                recordInterval = setInterval(() => {
-                                    seconds++;
-                                    const minutes = Math.floor(seconds / 60);
-                                    const displaySeconds = seconds % 60;
-                                    timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
-                                }, 1000);
-                            });
+                            const timerElement = document.getElementById('recordTimer');
+                            timerElement.style.display = 'block';
+                            
+                            recordInterval = setInterval(() => {
+                                recordingDuration++;
+                                const minutes = Math.floor(recordingDuration / 60);
+                                const displaySeconds = recordingDuration % 60;
+                                timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
+                            }, 1000);
+                        });
                     });
 
                     document.getElementById('stop').addEventListener('click', () => {
-                        mediaRecorder.stop();
-                        document.getElementById('start').disabled = false;
-                        document.getElementById('stop').disabled = true;
-                    });
+                    mediaRecorder.stop();
+                    document.getElementById('start').disabled = false;
+                    document.getElementById('stop').disabled = true;
+                });
 
-                    document.getElementById('save').addEventListener('click', () => {
-                        const audioBlob = window.audioBlob;
-                        const audioType = window.audioType;
-                        
-                        if (!audioBlob) {
-                            alert('No audio to save!');
-                            return;
+                document.getElementById('save').addEventListener('click', () => {
+                    const audioBlob = window.audioBlob;
+                    const audioType = window.audioType;
+                    const duration = window.audioType === 'recorded' ? recordingDuration : (isFinite(window.audioDuration) ? window.audioDuration : 0);
+                    
+                    if (!audioBlob) {
+                        alert('No audio to save!');
+                        return;
+                    }
+
+                    const formData = new FormData();
+                    const timestamp = Math.floor(Date.now() / 1000);
+                    const filename = `recording_${timestamp}.wav`;
+                    formData.append('audio_file', audioBlob, filename);
+                    formData.append('audio_type', audioType);
+                    formData.append('duration', duration.toFixed(2));
+
+                    fetch('/save-audio', {
+                        method: 'POST',
+                        body: formData,
+                    }).then(response => {
+                        if (response.ok) {
+                            response.json().then(data => {
+                                alert(`Audio saved successfully! It will show up in the Notes page shortly.`);
+                            });
+                        } else {
+                            alert('Failed to save audio.');
                         }
-
-                        const formData = new FormData();
-                        const timestamp = Math.floor(Date.now() / 1000);
-                        const filename = `recording_${timestamp}.wav`;
-                        formData.append('audio_file', audioBlob, filename);
-                        formData.append('audio_type', audioType);
-
-                        fetch('/save-audio', {
-                            method: 'POST',
-                            body: formData,
-                        }).then(response => {
-                            if (response.ok) {
-                                response.json().then(data => {
-                                    alert(`Audio saved successfully! It will show up in the Notes page shortly.`);
-                                });
-                            } else {
-                                alert('Failed to save audio.');
-                            }
-                        });
                     });
-                    """
+                });
+                """
                 ),
             ),
         ),
@@ -309,7 +316,8 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
             audios.audio_key,
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
-            COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary
+            COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary,
+            metadata->>'duration' as duration
         FROM audios
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
@@ -394,10 +402,17 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
                     P(note[2], cls="note-title"),
                     cls="note-info",
                 ),
-                Button(
-                    I(cls="fas fa-trash"),
-                    cls="delete-btn",
-                    onclick=f"deleteNote('{note[0]}')",
+                Div(
+                    P(
+                        note[4] if note[4] else "0.00s",
+                        cls="note-duration",
+                    ),
+                    Button(
+                        I(cls="fas fa-trash"),
+                        cls="delete-btn",
+                        onclick=f"deleteNote('{note[0]}')",
+                    ),
+                    cls="note-actions",
                 ),
                 cls="note-header",
             ),
@@ -672,7 +687,8 @@ def note_detail(audio_key: str):
             audios.audio_key,
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
-            COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription
+            COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
+            metadata->>'duration' as duration
         FROM audios
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
@@ -817,32 +833,45 @@ def note_detail(audio_key: str):
                 A("\u2190 Back to Notes", href="/notes", cls="back-button"),
                 Div(
                     Div(
-                        Div(
-                            Div(
-                                P(note[1], cls="note-date"),
-                                P(note[2], cls="note-title"),
-                                cls="note-info",
-                            ),
-                            Button(
-                                I(cls="fas fa-trash"),
-                                cls="delete-btn",
-                                onclick=f"deleteNote('{note[0]}')",
-                            ),
-                            cls="note-header",
-                        ),
-                        P(note[3], cls="note-transcription"),
-                        cls="note",
+                        P(note[1], cls="note-date"),
+                        P(note[2], cls="note-title"),
+                        cls="note-info",
                     ),
-                    cls="container",
+                    Div(
+                        P(
+                            note[4] if note[4] else "0.00s",
+                            cls="note-duration",
+                        ),
+                        Button(
+                            I(cls="fas fa-trash"),
+                            cls="delete-btn",
+                            onclick=f"deleteNote('{note[0]}')",
+                        ),
+                        cls="note-actions",
+                    ),
+                    cls="note-header",
                 ),
+                P(note[3], cls="note-transcription"),
+                cls="container",
             )
         ),
     )
 
 
 @rt("/save-audio")
-async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):
+async def save_audio(
+    audio_file: UploadFile, audio_type: str = Form(...), duration: str = Form(...)
+):
     try:
+        # Read file into memory for analysis
+        contents = await audio_file.read()
+
+        # Generate metadata with browser-provided duration
+        metadata = {
+            "duration": f"{float(duration):.2f}s",
+            "file_size": f"{len(contents) / 1024 / 1024:.2f}MB",
+        }
+
         # Generate S3 file name
         timestamp = int(datetime.now().timestamp())
         prefix = "audios"
@@ -858,8 +887,20 @@ async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):
         # Insert record into PostgreSQL with audio_type
         try:
             cursor.execute(
-                "INSERT INTO audios (audio_key, user_id, s3_object_url, audio_type, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING audio_key",
-                (audio_key, user_id, s3_url, audio_type, datetime.now()),
+                """
+            INSERT INTO audios 
+            (audio_key, user_id, s3_object_url, audio_type, created_at, metadata) 
+            VALUES (%s, %s, %s, %s, %s, %s) 
+            RETURNING audio_key
+            """,
+                (
+                    audio_key,
+                    user_id,
+                    s3_url,
+                    audio_type,
+                    datetime.now(),
+                    json.dumps(metadata),
+                ),
             )
             conn.commit()
             logging.info(f"Database record created for audio_key: {audio_key}")
@@ -868,6 +909,9 @@ async def save_audio(audio_file: UploadFile, audio_type: str = Form(...)):
                 f"Database insertion failed for audio_key {audio_key}: {str(e)}"
             )
             raise
+
+        # Reset file pointer for S3 upload
+        audio_file.file.seek(0)
 
         # Upload to S3
         try:

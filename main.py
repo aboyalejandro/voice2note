@@ -128,6 +128,27 @@ def get_common_styles():
     """
 
 
+def get_logout_button():
+    return Div(
+        Form(
+            Button(
+                "Logout",
+                type="submit",
+                cls="logout-btn",
+            ),
+            method="POST",
+            action="/api/logout",
+        ),
+        style="position: absolute; top: 20px; right: 20px;",
+    )
+
+
+def get_logout_styles():
+    return """
+    
+    """
+
+
 @rt("/login")
 def login(request: Request):
     return Html(
@@ -456,6 +477,18 @@ def home(request):
             ),
             Div(
                 Div(
+                    Form(
+                        Button(
+                            "Logout",
+                            type="submit",
+                            cls="logout-btn",
+                        ),
+                        method="POST",
+                        action="/api/logout",
+                    ),
+                    style="position: absolute; top: 20px; right: 20px;",
+                ),
+                Div(
                     Input(
                         type="file",
                         id="uploadInput",
@@ -598,6 +631,19 @@ def home(request):
                     }
                     .notes-btn:hover {
                         background-color: #004080;
+                    }
+                    .logout-btn {
+                        padding: 8px 16px;
+                        background-color: #dc3545;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        transition: background-color 0.2s;
+                    }
+                    .logout-btn:hover {
+                        background-color: #c82333;
                     }
                     """
                 ),
@@ -1060,6 +1106,19 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 .delete-btn:hover {
                     opacity: 1;
                 }
+                .logout-btn {
+                    padding: 8px 16px;
+                    background-color: #dc3545;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: background-color 0.2s;
+                }
+                .logout-btn:hover {
+                    background-color: #c82333;
+                }
                 """
             ),
             Script(
@@ -1098,10 +1157,22 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
         ),
         Body(
             Div(
+                Form(
+                    Button(
+                        "Logout",
+                        type="submit",
+                        cls="logout-btn",
+                    ),
+                    method="POST",
+                    action="/api/logout",
+                ),
+                style="position: absolute; top: 20px; right: 20px;",
+            ),
+            Div(
                 A("\u2190 Back", href="/", cls="back-button"),
                 Div(H1("Your Last Notes", cls="title")),
                 Div(search_form, *note_cards, cls="container"),
-            )
+            ),
         ),
     )
 
@@ -1249,6 +1320,19 @@ def note_detail(request: Request, audio_key: str):
                 .delete-btn:hover {
                     opacity: 1;
                 }
+                .logout-btn {
+                    padding: 8px 16px;
+                    background-color: #dc3545;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: background-color 0.2s;
+                }
+                .logout-btn:hover {
+                    background-color: #c82333;
+                }
                 """
             ),
             Script(
@@ -1276,6 +1360,18 @@ def note_detail(request: Request, audio_key: str):
         ),
         Body(
             Div(
+                Form(
+                    Button(
+                        "Logout",
+                        type="submit",
+                        cls="logout-btn",
+                    ),
+                    method="POST",
+                    action="/api/logout",
+                ),
+                style="position: absolute; top: 20px; right: 20px;",
+            ),
+            Div(
                 A("\u2190 Back to Notes", href="/notes", cls="back-button"),
                 Div(
                     Div(
@@ -1299,7 +1395,7 @@ def note_detail(request: Request, audio_key: str):
                 ),
                 P(note[3], cls="note-transcription"),
                 cls="container",
-            )
+            ),
         ),
     )
 

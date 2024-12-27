@@ -196,10 +196,11 @@ def login(request: Request):
                 P(
                     "Don't have an account? ",
                     A("Sign up", href="/signup"),
+                    " • ",
+                    A("Forgot Password?", href="/forgot-password"),
                     cls="auth-link",
                 ),
-                cls="auth-container",
-            )
+            ),
         ),
     )
 
@@ -457,6 +458,203 @@ def get_current_user_id(request):
     )
     result = cursor.fetchone()
     return result[0] if result else None
+
+
+@rt("/forgot-password")
+def forgot_password():
+    return Html(
+        Head(
+            Title("Reset Password - Voice2Note"),
+            Style(get_common_styles()),
+        ),
+        Body(
+            Div(
+                H1("Reset Password", cls="auth-title"),
+                Form(
+                    Div(
+                        Label("Username", For="username", cls="form-label"),
+                        Input(
+                            type="text",
+                            name="username",
+                            id="username",
+                            required=True,
+                            cls="form-input",
+                            placeholder="Enter your username",
+                        ),
+                        cls="form-group",
+                    ),
+                    Button("Request Reset", type="submit", cls="auth-btn"),
+                    method="POST",
+                    action="/api/request-reset",
+                    cls="auth-form",
+                ),
+                P(
+                    "Remember your password? ",
+                    A("Login", href="/login"),
+                    cls="auth-link",
+                ),
+                cls="auth-container",
+            )
+        ),
+    )
+
+
+@rt("/reset-password/{token}")
+def reset_password(token: str):
+    return Html(
+        Head(
+            Title("Set New Password - Voice2Note"),
+            Style(get_common_styles()),
+        ),
+        Body(
+            Div(
+                H1("Set New Password", cls="auth-title"),
+                Form(
+                    Div(
+                        Label("New Password", For="password", cls="form-label"),
+                        Input(
+                            type="password",
+                            name="password",
+                            id="password",
+                            required=True,
+                            cls="form-input",
+                            placeholder="Enter new password",
+                        ),
+                        cls="form-group",
+                    ),
+                    Input(type="hidden", name="token", value=token),
+                    Button("Reset Password", type="submit", cls="auth-btn"),
+                    method="POST",
+                    action="/api/reset-password",
+                    cls="auth-form",
+                ),
+                cls="auth-container",
+            )
+        ),
+    )
+
+
+# API endpoints for password reset
+@rt("/api/request-reset", methods=["POST"])
+async def request_reset(request):
+    form = await request.form()
+    username = form.get("username")
+
+    # Check if user exists
+    cursor.execute("SELECT user_id FROM users WHERE username = %s", (username,))
+    user = cursor.fetchone()
+
+    if not user:
+        return Html(
+            Head(Title("Reset Password Error"), Style(get_common_styles())),
+            Body(
+                Div(
+                    H1("Reset Password Error", cls="auth-title"),
+                    P("Username not found", cls="error-message"),
+                    A("Try Again", href="/forgot-password", cls="auth-btn"),
+                    cls="auth-container",
+                )
+            ),
+        )
+
+    # Generate reset token and set expiration
+    reset_token = str(uuid.uuid4())
+    expires_at = datetime.now() + timedelta(hours=1)
+
+    # Save token to database
+    cursor.execute(
+        """
+        UPDATE users 
+        SET reset_token = %s, reset_token_expires = %s 
+        WHERE username = %s
+        """,
+        (reset_token, expires_at, username),
+    )
+    conn.commit()
+
+    # In a real application, you would send an email here
+    # For demonstration, we'll show the reset link
+    reset_link = f"/reset-password/{reset_token}"
+
+    return Html(
+        Head(Title("Reset Password"), Style(get_common_styles())),
+        Body(
+            Div(
+                H1("Reset Password", cls="auth-title"),
+                P("Password reset link generated:", cls="info-message"),
+                A(
+                    "Click here to reset password",
+                    href=reset_link,
+                    cls="auth-btn",
+                    style="display: block; text-align: center; margin: 20px 0;",
+                ),
+                P(
+                    "This link will expire in 1 hour.",
+                    style="text-align: center; color: #666;",
+                ),
+                cls="auth-container",
+            )
+        ),
+    )
+
+
+@rt("/api/reset-password", methods=["POST"])
+async def reset_password_submit(request):
+    form = await request.form()
+    token = form.get("token")
+    new_password = form.get("password")
+
+    # Verify token and get user
+    cursor.execute(
+        """
+        SELECT user_id 
+        FROM users 
+        WHERE reset_token = %s 
+        AND reset_token_expires > CURRENT_TIMESTAMP
+        """,
+        (token,),
+    )
+    user = cursor.fetchone()
+
+    if not user:
+        return Html(
+            Head(Title("Reset Error"), Style(get_common_styles())),
+            Body(
+                Div(
+                    H1("Reset Error", cls="auth-title"),
+                    P("Invalid or expired reset link", cls="error-message"),
+                    A("Back to Login", href="/login", cls="auth-btn"),
+                    cls="auth-container",
+                )
+            ),
+        )
+
+    # Update password and clear reset token
+    hashed_password = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt())
+    cursor.execute(
+        """
+        UPDATE users 
+        SET hashed_password = %s, reset_token = NULL, reset_token_expires = NULL 
+        WHERE user_id = %s
+        """,
+        (hashed_password.decode("utf-8"), user[0]),
+    )
+    conn.commit()
+
+    return Html(
+        Head(Title("Password Reset Success"), Style(get_common_styles())),
+        Body(
+            Div(
+                H1("Password Reset Success", cls="auth-title"),
+                P(
+                    "Your password has been successfully reset.",
+                    style="text-align: center; margin: 20px 0;",
+                ),
+                A("Login Now", href="/login", cls="auth-btn"),
+                cls="auth-container",
+            )
+        ),
+    )
 
 
 @rt("/")

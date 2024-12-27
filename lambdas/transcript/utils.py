@@ -1,29 +1,34 @@
 import boto3
-from datetime import datetime
+
 
 # Transcription function in AWS Transcribe
-def transcribe_audio(
-    bucket_name: str,
-    object_key: str, 
-    client
-    ):
+def transcribe_audio(bucket_name: str, object_key: str, client):
     try:
-        file_cleaned = object_key.split('/')[1].replace('.wav', '')
-        job_name = f'v2n_layer_transcribe_job_{file_cleaned}'
+        # Parse path components from the new structure
+        path_parts = object_key.split("/")  # ['user_1', 'audios', '1_timestamp.wav']
+        user_path = path_parts[0]  # user_1
+        audio_key = path_parts[2].replace(".wav", "")  # 1_timestamp
+
+        job_name = f"v2n_transcribe_job_{audio_key}"
         file_uri = f"s3://{bucket_name}/{object_key}"
 
         print(f"Starting transcription job for {job_name}")
 
+        # Store transcript in user's folder structure
+        output_key = f"{user_path}/transcripts/raw/{audio_key}.json"
+
         response = client.start_transcription_job(
             TranscriptionJobName=job_name,
-            Media={'MediaFileUri': file_uri},
-            MediaFormat='wav',
-            IdentifyLanguage=True, 
-            LanguageOptions=['en-US', 'es-ES'], 
+            Media={"MediaFileUri": file_uri},
+            MediaFormat="wav",
+            IdentifyLanguage=True,
+            LanguageOptions=["en-US", "es-ES"],
             OutputBucketName=bucket_name,
-            OutputKey=f"transcripts/raw/{file_cleaned}.json"
+            OutputKey=output_key,
         )
-        return f"Transcription job started: {response}"
+
+        print(f"Transcription configured to output to: s3://{bucket_name}/{output_key}")
+        return response
 
     except Exception as e:
         print(f"Error during transcription: {e}")

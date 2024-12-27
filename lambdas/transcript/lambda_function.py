@@ -5,26 +5,42 @@ from utils import transcribe_audio
 
 # AWS clients
 s3_client = boto3.client("s3")
-transcribe_client = boto3.client('transcribe')
+transcribe_client = boto3.client("transcribe")
+
 
 # Lambda handler
-def lambda_handler(event, context): 
+def lambda_handler(event, context):
     try:
         # Extract bucket and object info from event
         bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
         object_key = event["Records"][0]["s3"]["object"]["key"]
-        
+
         print(f"New file detected: {object_key} in bucket {bucket_name}")
 
-        # Download file from S3
-        filename = os.path.basename(object_key)
-        local_file_path = f"/tmp/{filename}"
-        s3_client.download_file(bucket_name, object_key, local_file_path)
-        print(f"File downloaded to {local_file_path}")
+        # Validate path structure
+        path_parts = object_key.split("/")
+        if (
+            len(path_parts) != 3
+            or not path_parts[0].startswith("user_")
+            or path_parts[1] != "audios"
+        ):
+            raise ValueError(
+                f"Invalid path structure: {object_key}. Expected: user_X/audios/filename.wav"
+            )
 
-        # Transcribe audio
-        transcript_text = transcribe_audio(bucket_name, object_key, transcribe_client)
-    
+        # Extract user_id for logging
+        user_id = path_parts[0].replace("user_", "")
+        audio_key = path_parts[2].replace(".wav", "")
+        print(f"Processing audio {audio_key} for user {user_id}")
+
+        # Start transcription
+        transcription_response = transcribe_audio(
+            bucket_name, object_key, transcribe_client
+        )
+
+        print(f"Transcription job started for user {user_id}: {transcription_response}")
+        return {"statusCode": 200, "body": f"Processing started for {object_key}"}
+
     except Exception as e:
         print(f"Error in processing: {e}")
         raise

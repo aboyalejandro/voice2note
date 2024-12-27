@@ -28,7 +28,7 @@ gpt_prompt_summary = """
     Provide the output in the language of the text input, here's your text
     """
 gpt_prompt_title = """
-    You are a voice note summarizing assistant that provides titles for note summaries of no more than 5 words, output the result without quotes. 
+    You are a voice note summarizing assistant that provides titles of no more than 5 words. 
     Provide the output in the language of the text input, here's your text
     """
 

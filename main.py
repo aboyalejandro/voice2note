@@ -281,12 +281,18 @@ def home():
                         return;
                     }
 
+                    // Convert duration to HH:MM:SS format
+                    const hours = Math.floor(duration / 3600);
+                    const minutes = Math.floor((duration % 3600) / 60);
+                    const seconds = Math.floor(duration % 60);
+                    const formattedDuration = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
                     const formData = new FormData();
                     const timestamp = Math.floor(Date.now() / 1000);
                     const filename = `recording_${timestamp}.wav`;
                     formData.append('audio_file', audioBlob, filename);
                     formData.append('audio_type', audioType);
-                    formData.append('duration', duration.toFixed(2));
+                    formData.append('duration', formattedDuration);
 
                     fetch('/save-audio', {
                         method: 'POST',
@@ -317,7 +323,7 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
             COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary,
-            metadata->>'duration' as duration
+            COALESCE(metadata->>'duration', '00:00:00') as duration
         FROM audios
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
@@ -490,9 +496,21 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
                 .note-header {
                     display: flex;
                     justify-content: space-between;
-                    align-items: center;
+                    align-items: flex-start;
                     margin-bottom: 5px;
                     color: #333;
+                }
+                .note-actions {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 10px;
+                }
+                .note-duration {
+                    color: #666;
+                    font-size: 0.9em;
+                    margin: 0;
+                    padding-top: 3px;
+                    font-weight: bold;
                 }
                 .note-info {
                     display: flex;
@@ -509,6 +527,7 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
                     color: #666;
                     font-size: 0.9em;
                     margin: 0;
+                    font-weight: bold;
                 }
                 .note-preview {
                     color: #666;
@@ -629,6 +648,7 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
                     font-size: 1.1em;
                     opacity: 0.7;
                     transition: opacity 0.2s;
+                    margin-top: -5px;
                 }
                 .delete-btn:hover {
                     opacity: 1;
@@ -688,7 +708,7 @@ def note_detail(audio_key: str):
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
             COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
-            metadata->>'duration' as duration
+            COALESCE(metadata->>'duration', '00:00:00') as duration
         FROM audios
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
@@ -763,10 +783,9 @@ def note_detail(audio_key: str):
                 .note-header {
                     display: flex;
                     justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 15px;
+                    align-items: flex-start;
+                    margin-bottom: 5px;
                     color: #333;
-                    width: 100%;
                 }
                 .note-info {
                     display: flex;
@@ -783,12 +802,25 @@ def note_detail(audio_key: str):
                     color: #666;
                     font-size: 0.9em;
                     margin: 0;
+                    font-weight: bold;
                 }
                 .note-transcription {
                     color: #333;
                     font-size: 16px;
                     line-height: 1.6;
                     white-space: pre-wrap;
+                }
+                .note-actions {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 10px;
+                }
+                .note-duration {
+                    color: #666;
+                    font-size: 0.9em;
+                    margin: 0;
+                    padding-top: 3px;
+                    font-weight: bold;
                 }
                 .delete-btn {
                     background: none;
@@ -799,6 +831,7 @@ def note_detail(audio_key: str):
                     font-size: 1.1em;
                     opacity: 0.7;
                     transition: opacity 0.2s;
+                    margin-top: -5px;
                 }
                 .delete-btn:hover {
                     opacity: 1;
@@ -868,7 +901,7 @@ async def save_audio(
 
         # Generate metadata with browser-provided duration
         metadata = {
-            "duration": f"{float(duration):.2f}s",
+            "duration": duration,
             "file_size": f"{len(contents) / 1024 / 1024:.2f}MB",
         }
 

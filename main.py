@@ -8,6 +8,7 @@ import logging
 import json
 import bcrypt
 import uuid
+from contextlib import contextmanager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -128,25 +129,86 @@ def get_common_styles():
     """
 
 
-def get_logout_button():
-    return Div(
-        Form(
-            Button(
-                "Logout",
-                type="submit",
-                cls="logout-btn",
-            ),
-            method="POST",
-            action="/api/logout",
-        ),
-        style="position: absolute; top: 20px; right: 20px;",
-    )
+def create_user_schema(user_id: int):
+    """Creates a new schema and required tables for a user"""
+    try:
+        # Create schema
+        cursor.execute(f"CREATE SCHEMA IF NOT EXISTS user_{user_id}")
+
+        # Create audios table
+        cursor.execute(
+            f"""
+            CREATE TABLE user_{user_id}.audios (
+                audio_id serial4 NOT NULL,
+                audio_key varchar(15) NOT NULL,
+                user_id int4 NOT NULL,
+                s3_object_url text NOT NULL,
+                audio_type varchar(8) NOT NULL,
+                created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                deleted_at timestamp NULL,
+                metadata jsonb NULL,
+                CONSTRAINT audios_audio_key_key UNIQUE (audio_key),
+                CONSTRAINT audios_audio_type_check CHECK (
+                    audio_type = ANY (ARRAY['recorded', 'uploaded'])
+                ),
+                CONSTRAINT audios_pkey PRIMARY KEY (audio_id)
+            )
+        """
+        )
+
+        # Create transcripts table
+        cursor.execute(
+            f"""
+            CREATE TABLE user_{user_id}.transcripts (
+                transcript_id serial4 NOT NULL,
+                audio_key varchar(255) NOT NULL,
+                s3_object_url text NULL,
+                transcription jsonb NULL,
+                created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                deleted_at timestamp NULL,
+                CONSTRAINT transcripts_pkey PRIMARY KEY (transcript_id)
+            )
+        """
+        )
+
+        # Create indexes
+        cursor.execute(
+            f"""
+            CREATE INDEX idx_audios_audio_id ON user_{user_id}.audios USING btree (audio_id);
+            CREATE INDEX idx_transcripts_audio_id ON user_{user_id}.transcripts USING btree (audio_key);
+            CREATE INDEX idx_transcripts_transcript_id ON user_{user_id}.transcripts USING btree (transcript_id)
+        """
+        )
+
+        # Add foreign key constraints
+        cursor.execute(
+            f"""
+            ALTER TABLE user_{user_id}.audios ADD CONSTRAINT fk_user_id 
+            FOREIGN KEY (user_id) REFERENCES public.users(user_id);
+            
+            ALTER TABLE user_{user_id}.transcripts ADD CONSTRAINT transcripts_audio_key_fkey 
+            FOREIGN KEY (audio_key) REFERENCES user_{user_id}.audios(audio_key)
+        """
+        )
+
+        conn.commit()
+        logging.info(f"Created schema and tables for user_{user_id}")
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error creating schema for user_{user_id}: {str(e)}")
+        raise
 
 
-def get_logout_styles():
-    return """
-    
-    """
+@contextmanager
+def use_user_schema(user_id: int):
+    """Context manager to temporarily switch to a user's schema"""
+    try:
+        cursor.execute(f"SET search_path TO user_{user_id}")
+        yield
+    finally:
+        cursor.execute("SET search_path TO public")
 
 
 @rt("/login")
@@ -271,10 +333,7 @@ async def api_signup(request):
     cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
     if cursor.fetchone():
         return Html(
-            Head(
-                Title("Sign Up Error - Voice2Note"),
-                Style(get_common_styles()),
-            ),
+            Head(Title("Sign Up Error - Voice2Note"), Style(get_common_styles())),
             Body(
                 Div(
                     H1("Sign Up Error", cls="auth-title"),
@@ -285,10 +344,10 @@ async def api_signup(request):
             ),
         )
 
-    # Hash password with bcrypt
-    hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
-
     try:
+        # Hash password
+        hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+
         # Insert new user
         cursor.execute(
             """
@@ -299,9 +358,11 @@ async def api_signup(request):
             (username, hashed_password.decode("utf-8")),
         )
         user_id = cursor.fetchone()[0]
-        conn.commit()
 
-        # Create session for the new user
+        # Create user schema and tables
+        create_user_schema(user_id)
+
+        # Create session
         session_id = str(uuid.uuid4())
         expires_at = datetime.now() + timedelta(days=7)
 
@@ -314,7 +375,6 @@ async def api_signup(request):
         )
         conn.commit()
 
-        # Redirect with session cookie
         response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(
             key="session_id",
@@ -330,10 +390,7 @@ async def api_signup(request):
         conn.rollback()
         logging.error(f"Error in signup: {str(e)}")
         return Html(
-            Head(
-                Title("Sign Up Error - Voice2Note"),
-                Style(get_common_styles()),
-            ),
+            Head(Title("Sign Up Error - Voice2Note"), Style(get_common_styles())),
             Body(
                 Div(
                     H1("Sign Up Error", cls="auth-title"),
@@ -968,6 +1025,8 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
     user_id = get_current_user_id(request)
     if not user_id:
         return RedirectResponse(url="/login", status_code=303)  # Base query
+
+    # Build query based on filters
     query = """
         SELECT 
             audios.audio_key,
@@ -976,12 +1035,10 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
             COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary,
             COALESCE(metadata->>'duration', '00:00:00') as duration
         FROM audios
-        LEFT JOIN transcripts
-        ON audios.audio_key = transcripts.audio_key
-        WHERE user_id = %s
-        AND audios.deleted_at IS NULL
+        LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
+        WHERE audios.deleted_at IS NULL
     """
-    query_params = [user_id]
+    query_params = []
 
     # Add date filtering if dates are provided
     if start_date and end_date:
@@ -1001,8 +1058,10 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
 
     query += " ORDER BY audios.created_at DESC"
 
-    cursor.execute(query, query_params)
-    notes = cursor.fetchall()
+    # Execute query in user's schema
+    with use_user_schema(user_id):
+        cursor.execute(query, query_params)
+        notes = cursor.fetchall()
 
     # Create search form with both date and keyword fields
     search_form = Div(
@@ -1382,25 +1441,26 @@ def note_detail(request: Request, audio_key: str):
     if not user_id:
         return RedirectResponse(url="/login", status_code=303)
 
-    cursor.execute(
-        """
-        SELECT 
-            audios.audio_key,
-            TO_CHAR(audios.created_at, 'MM/DD') as note_date,
-            COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
-            COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
-            metadata->>'duration' as duration
-        FROM audios
-        LEFT JOIN transcripts
-        ON audios.audio_key = transcripts.audio_key
-        WHERE audios.audio_key = %s
-        AND audios.user_id = %s  -- Add user_id check
-        AND audios.deleted_at IS NULL
-        """,
-        (audio_key, user_id),
-    )
-    note = cursor.fetchone()
+    # Query note details in user's schema
+    with use_user_schema(user_id):
+        cursor.execute(
+            """
+            SELECT 
+                audios.audio_key,
+                TO_CHAR(audios.created_at, 'MM/DD') as note_date,
+                COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
+                COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
+                metadata->>'duration' as duration
+            FROM audios
+            LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
+            WHERE audios.audio_key = %s
+            AND audios.deleted_at IS NULL
+            """,
+            (audio_key,),
+        )
+        note = cursor.fetchone()
 
+    # Handle note not found
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
@@ -1605,40 +1665,37 @@ async def save_audio(
     audio_type: str = Form(...),
     duration: str = Form(...),
 ):
-    # Get the current user_id from session
     user_id = get_current_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
-        # Read file into memory for analysis
         contents = await audio_file.read()
 
-        # Generate metadata with browser-provided duration
+        # Generate metadata
         metadata = {
             "duration": duration,
             "file_size": f"{len(contents) / 1024 / 1024:.2f}MB",
         }
 
-        # Generate S3 file name
+        # Generate keys and paths
         timestamp = int(datetime.now().timestamp())
-        prefix = "audios"
-        s3_key = f"{prefix}/{user_id}_{timestamp}.wav"
         audio_key = f"{user_id}_{timestamp}"
-
-        # Generate S3 URL
+        s3_key = f"user_{user_id}/audios/{audio_key}.wav"
         s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
 
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
 
-        # Insert record into PostgreSQL with audio_type
+        # Insert record using user schema
         try:
+            cursor.execute(f"SET search_path TO user_{user_id}")
             cursor.execute(
                 """
-            INSERT INTO audios 
-            (audio_key, user_id, s3_object_url, audio_type, created_at, metadata) 
-            VALUES (%s, %s, %s, %s, %s, %s) 
-            RETURNING audio_key
-            """,
+                INSERT INTO audios 
+                (audio_key, user_id, s3_object_url, audio_type, created_at, metadata) 
+                VALUES (%s, %s, %s, %s, %s, %s) 
+                RETURNING audio_key
+                """,
                 (
                     audio_key,
                     user_id,
@@ -1649,17 +1706,17 @@ async def save_audio(
                 ),
             )
             conn.commit()
+            cursor.execute("SET search_path TO public")  # Reset schema
             logging.info(f"Database record created for audio_key: {audio_key}")
         except Exception as e:
+            cursor.execute("SET search_path TO public")  # Reset schema
             logging.error(
                 f"Database insertion failed for audio_key {audio_key}: {str(e)}"
             )
             raise
 
-        # Reset file pointer for S3 upload
-        audio_file.file.seek(0)
-
         # Upload to S3
+        audio_file.file.seek(0)
         try:
             s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
             logging.info(f"Audio file uploaded to S3: {s3_key}")
@@ -1667,7 +1724,7 @@ async def save_audio(
             logging.error(f"S3 upload failed for key {s3_key}: {str(e)}")
             raise
 
-        return {"audio_key": cursor.fetchone()[0]}
+        return {"audio_key": audio_key}
 
     except Exception as e:
         logging.error(f"Error in save_audio endpoint: {str(e)}")
@@ -1676,50 +1733,47 @@ async def save_audio(
 
 @rt("/delete-note/{audio_key}")
 async def delete_note(request: Request, audio_key: str):
-    # Get current user_id from session
+    # Authentication check uses public schema
     user_id = get_current_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        # First verify the note belongs to the user
-        cursor.execute(
-            """
-            SELECT user_id FROM audios 
-            WHERE audio_key = %s AND deleted_at IS NULL
-            """,
-            (audio_key,),
-        )
-        note = cursor.fetchone()
-
-        if not note:
-            raise HTTPException(status_code=404, detail="Note not found")
-
-        if note[0] != user_id:
-            raise HTTPException(
-                status_code=403, detail="Not authorized to delete this note"
+        # Switch to user schema for all database operations
+        with use_user_schema(user_id):
+            # Check if note exists
+            cursor.execute(
+                "SELECT 1 FROM audios WHERE audio_key = %s AND deleted_at IS NULL",
+                (audio_key,),
             )
 
-        # Update both tables with current timestamp
-        cursor.execute(
-            """
-            WITH audio_update AS (
-                UPDATE audios 
+            if not cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Note not found")
+
+            # Soft delete both audio and transcript records
+            cursor.execute(
+                """
+                WITH audio_update AS (
+                    UPDATE audios 
+                    SET deleted_at = CURRENT_TIMESTAMP 
+                    WHERE audio_key = %s
+                )
+                UPDATE transcripts 
                 SET deleted_at = CURRENT_TIMESTAMP 
                 WHERE audio_key = %s
-                AND user_id = %s  -- Add user_id check
+                """,
+                (audio_key, audio_key),
             )
-            UPDATE transcripts 
-            SET deleted_at = CURRENT_TIMESTAMP 
-            WHERE audio_key = %s;
-            """,
-            (audio_key, user_id, audio_key),
-        )
-        conn.commit()
+            conn.commit()
+
+        # Back in public schema - return response
         return {"success": True}
+
     except HTTPException:
+        # Re-raise HTTP exceptions for proper error handling
         raise
     except Exception as e:
+        # Log error and rollback transaction
         logging.error(f"Error deleting note: {str(e)}")
         conn.rollback()
         raise HTTPException(status_code=500, detail="Error deleting note")

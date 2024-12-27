@@ -1,11 +1,13 @@
 from fasthtml.common import *
 import boto3
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import psycopg2
 import logging
 import json
+import bcrypt
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,8 +38,411 @@ cursor = conn.cursor()
 app, rt = fast_app()
 
 
+def get_common_styles():
+    return """
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f9f9f9;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+    }
+    .auth-container {
+        width: 90%;
+        max-width: 400px;
+        background-color: #ffffff;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+    }
+    .auth-title {
+        font-size: 24px;
+        font-weight: bold;
+        color: navy;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .auth-form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .form-label {
+        color: navy;
+        font-weight: 500;
+    }
+    .form-input {
+        padding: 10px;
+        border: 1px solid navy;
+        border-radius: 4px;
+        font-size: 16px;
+    }
+    .form-input:focus {
+        outline: none;
+        border-color: #004080;
+        box-shadow: 0 0 0 2px rgba(0, 64, 128, 0.1);
+    }
+    .auth-btn {
+        font-size: 16px;
+        padding: 12px 20px;
+        background-color: navy;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .auth-btn:hover {
+        background-color: #004080;
+    }
+    .auth-link {
+        text-align: center;
+        margin-top: 15px;
+        color: #666;
+    }
+    .auth-link a {
+        color: navy;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .auth-link a:hover {
+        text-decoration: underline;
+    }
+    .error-message {
+        color: #dc3545;
+        background-color: #ffe6e6;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        font-size: 14px;
+        text-align: center;
+    }
+    """
+
+
+@rt("/login")
+def login(request: Request):
+    return Html(
+        Head(
+            Title("Login - Voice2Note"),
+            Link(
+                rel="stylesheet",
+                href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
+            ),
+            Style(get_common_styles()),
+        ),
+        Body(
+            Div(
+                H1("Login to Voice2Note", cls="auth-title"),
+                Form(
+                    Div(
+                        Label("Username", For="username", cls="form-label"),
+                        Input(
+                            type="text",
+                            name="username",
+                            id="username",
+                            required=True,
+                            cls="form-input",
+                            placeholder="Enter your username",
+                        ),
+                        cls="form-group",
+                    ),
+                    Div(
+                        Label("Password", For="password", cls="form-label"),
+                        Input(
+                            type="password",
+                            name="password",
+                            id="password",
+                            required=True,
+                            cls="form-input",
+                            placeholder="Enter your password",
+                        ),
+                        cls="form-group",
+                    ),
+                    Button("Login", type="submit", cls="auth-btn"),
+                    method="POST",
+                    action="/api/login",
+                    cls="auth-form",
+                ),
+                P(
+                    "Don't have an account? ",
+                    A("Sign up", href="/signup"),
+                    cls="auth-link",
+                ),
+                cls="auth-container",
+            )
+        ),
+    )
+
+
+@rt("/signup")
+def signup(request: Request):
+    return Html(
+        Head(
+            Title("Sign Up - Voice2Note"),
+            Link(
+                rel="stylesheet",
+                href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
+            ),
+            Style(get_common_styles()),
+        ),
+        Body(
+            Div(
+                H1("Create Account", cls="auth-title"),
+                Form(
+                    Div(
+                        Label("Username", For="username", cls="form-label"),
+                        Input(
+                            type="text",
+                            name="username",
+                            id="username",
+                            required=True,
+                            cls="form-input",
+                            placeholder="Choose a username",
+                        ),
+                        cls="form-group",
+                    ),
+                    Div(
+                        Label("Password", For="password", cls="form-label"),
+                        Input(
+                            type="password",
+                            name="password",
+                            id="password",
+                            required=True,
+                            cls="form-input",
+                            placeholder="Choose a password",
+                        ),
+                        cls="form-group",
+                    ),
+                    Button("Create Account", type="submit", cls="auth-btn"),
+                    method="POST",
+                    action="/api/signup",
+                    cls="auth-form",
+                ),
+                P(
+                    "Already have an account? ",
+                    A("Login", href="/login"),
+                    cls="auth-link",
+                ),
+                cls="auth-container",
+            )
+        ),
+    )
+
+
+# API endpoints for authentication
+@rt("/api/signup", methods=["POST"])
+async def api_signup(request):
+    form = await request.form()
+    username = form.get("username")
+    password = form.get("password")
+
+    # Check if username already exists
+    cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
+    if cursor.fetchone():
+        return Html(
+            Head(
+                Title("Sign Up Error - Voice2Note"),
+                Style(get_common_styles()),
+            ),
+            Body(
+                Div(
+                    H1("Sign Up Error", cls="auth-title"),
+                    P("Username already exists", cls="error-message"),
+                    A("Try Again", href="/signup", cls="auth-btn"),
+                    cls="auth-container",
+                )
+            ),
+        )
+
+    # Hash password with bcrypt
+    hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+
+    try:
+        # Insert new user
+        cursor.execute(
+            """
+            INSERT INTO users (username, hashed_password, created_at)
+            VALUES (%s, %s, CURRENT_TIMESTAMP)
+            RETURNING user_id
+            """,
+            (username, hashed_password.decode("utf-8")),
+        )
+        user_id = cursor.fetchone()[0]
+        conn.commit()
+
+        # Create session for the new user
+        session_id = str(uuid.uuid4())
+        expires_at = datetime.now() + timedelta(days=7)
+
+        cursor.execute(
+            """
+            INSERT INTO sessions (session_id, user_id, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (session_id, user_id, expires_at),
+        )
+        conn.commit()
+
+        # Redirect with session cookie
+        response = RedirectResponse(url="/", status_code=303)
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            max_age=7 * 24 * 60 * 60,
+            secure=True,
+            samesite="lax",
+        )
+        return response
+
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error in signup: {str(e)}")
+        return Html(
+            Head(
+                Title("Sign Up Error - Voice2Note"),
+                Style(get_common_styles()),
+            ),
+            Body(
+                Div(
+                    H1("Sign Up Error", cls="auth-title"),
+                    P("Error creating account. Please try again.", cls="error-message"),
+                    A("Try Again", href="/signup", cls="auth-btn"),
+                    cls="auth-container",
+                )
+            ),
+        )
+
+
+@rt("/api/login", methods=["POST"])
+async def api_login(request):
+    form = await request.form()
+    username = form.get("username")
+    password = form.get("password")
+
+    # Get user from database
+    cursor.execute(
+        "SELECT user_id, username, hashed_password FROM users WHERE username = %s",
+        (username,),
+    )
+    user = cursor.fetchone()
+
+    if not user:
+        return Html(
+            Head(Title("Login Error - Voice2Note"), Style(get_common_styles())),
+            Body(
+                Div(
+                    H1("Login Error", cls="auth-title"),
+                    P("Invalid username or password", cls="error-message"),
+                    A("Try Again", href="/login", cls="auth-btn"),
+                    cls="auth-container",
+                )
+            ),
+        )
+
+    try:
+        # Verify password
+        if not bcrypt.checkpw(password.encode("utf-8"), user[2].encode("utf-8")):
+            return Html(
+                Head(Title("Login Error - Voice2Note"), Style(get_common_styles())),
+                Body(
+                    Div(
+                        H1("Login Error", cls="auth-title"),
+                        P("Invalid username or password", cls="error-message"),
+                        A("Try Again", href="/login", cls="auth-btn"),
+                        cls="auth-container",
+                    )
+                ),
+            )
+
+        # Create new session
+        session_id = str(uuid.uuid4())
+        expires_at = datetime.now() + timedelta(days=7)
+
+        cursor.execute(
+            """
+            INSERT INTO sessions (session_id, user_id, expires_at)
+            VALUES (%s, %s, %s)
+            """,
+            (session_id, user[0], expires_at),
+        )
+        conn.commit()
+
+        response = RedirectResponse(url="/", status_code=303)
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            max_age=7 * 24 * 60 * 60,
+            secure=True,
+            samesite="lax",
+        )
+        return response
+
+    except Exception as e:
+        logging.error(f"Error in login: {str(e)}")
+        conn.rollback()
+        return Html(
+            Head(Title("Login Error - Voice2Note"), Style(get_common_styles())),
+            Body(
+                Div(
+                    H1("Login Error", cls="auth-title"),
+                    P("An error occurred. Please try again.", cls="error-message"),
+                    A("Try Again", href="/login", cls="auth-btn"),
+                    cls="auth-container",
+                )
+            ),
+        )
+
+
+@rt("/api/logout", methods=["POST"])
+async def api_logout(request):
+    session_id = request.cookies.get("session_id")
+    if session_id:
+        cursor.execute(
+            "UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE session_id = %s",
+            (session_id,),
+        )
+        conn.commit()
+
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(key="session_id")
+    return response
+
+
+# Middleware for auth checking
+def get_current_user_id(request):
+    session_id = request.cookies.get("session_id")
+    if not session_id:
+        return None
+
+    cursor.execute(
+        """
+        SELECT user_id FROM sessions 
+        WHERE session_id = %s 
+        AND deleted_at IS NULL 
+        AND expires_at > CURRENT_TIMESTAMP
+        """,
+        (session_id,),
+    )
+    result = cursor.fetchone()
+    return result[0] if result else None
+
+
 @rt("/")
-def home():
+def home(request):
+    user_id = get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
     return Html(
         Head(Title("Voice2Note")),
         Body(
@@ -315,8 +720,10 @@ def home():
 
 
 @rt("/notes")
-def notes(start_date: str = None, end_date: str = None, keyword: str = None):
-    # Base query
+def notes(request, start_date: str = None, end_date: str = None, keyword: str = None):
+    user_id = get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)  # Base query
     query = """
         SELECT 
             audios.audio_key,
@@ -330,7 +737,7 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
         WHERE user_id = %s
         AND audios.deleted_at IS NULL
     """
-    query_params = [1]
+    query_params = [user_id]
 
     # Add date filtering if dates are provided
     if start_date and end_date:
@@ -700,7 +1107,12 @@ def notes(start_date: str = None, end_date: str = None, keyword: str = None):
 
 
 @rt("/note_{audio_key}")
-def note_detail(audio_key: str):
+def note_detail(request: Request, audio_key: str):
+    # Get current user_id from session
+    user_id = get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+
     cursor.execute(
         """
         SELECT 
@@ -708,14 +1120,15 @@ def note_detail(audio_key: str):
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
             COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
-            COALESCE(metadata->>'duration', '00:00:00') as duration
+            metadata->>'duration' as duration
         FROM audios
         LEFT JOIN transcripts
         ON audios.audio_key = transcripts.audio_key
         WHERE audios.audio_key = %s
+        AND audios.user_id = %s  -- Add user_id check
         AND audios.deleted_at IS NULL
         """,
-        (audio_key,),
+        (audio_key, user_id),
     )
     note = cursor.fetchone()
 
@@ -893,8 +1306,15 @@ def note_detail(audio_key: str):
 
 @rt("/save-audio")
 async def save_audio(
-    audio_file: UploadFile, audio_type: str = Form(...), duration: str = Form(...)
+    request: Request,
+    audio_file: UploadFile,
+    audio_type: str = Form(...),
+    duration: str = Form(...),
 ):
+    # Get the current user_id from session
+    user_id = get_current_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
     try:
         # Read file into memory for analysis
         contents = await audio_file.read()
@@ -908,7 +1328,6 @@ async def save_audio(
         # Generate S3 file name
         timestamp = int(datetime.now().timestamp())
         prefix = "audios"
-        user_id = 1
         s3_key = f"{prefix}/{user_id}_{timestamp}.wav"
         audio_key = f"{user_id}_{timestamp}"
 
@@ -962,8 +1381,31 @@ async def save_audio(
 
 
 @rt("/delete-note/{audio_key}")
-async def delete_note(audio_key: str):
+async def delete_note(request: Request, audio_key: str):
+    # Get current user_id from session
+    user_id = get_current_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
+        # First verify the note belongs to the user
+        cursor.execute(
+            """
+            SELECT user_id FROM audios 
+            WHERE audio_key = %s AND deleted_at IS NULL
+            """,
+            (audio_key,),
+        )
+        note = cursor.fetchone()
+
+        if not note:
+            raise HTTPException(status_code=404, detail="Note not found")
+
+        if note[0] != user_id:
+            raise HTTPException(
+                status_code=403, detail="Not authorized to delete this note"
+            )
+
         # Update both tables with current timestamp
         cursor.execute(
             """
@@ -971,15 +1413,18 @@ async def delete_note(audio_key: str):
                 UPDATE audios 
                 SET deleted_at = CURRENT_TIMESTAMP 
                 WHERE audio_key = %s
+                AND user_id = %s  -- Add user_id check
             )
             UPDATE transcripts 
             SET deleted_at = CURRENT_TIMESTAMP 
             WHERE audio_key = %s;
             """,
-            (audio_key, audio_key),
+            (audio_key, user_id, audio_key),
         )
         conn.commit()
         return {"success": True}
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Error deleting note: {str(e)}")
         conn.rollback()

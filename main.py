@@ -1592,6 +1592,20 @@ def note_detail(request: Request, audio_key: str):
                 .delete-btn:hover {
                     opacity: 1;
                 }
+                .edit-btn {
+                    background: none;
+                    border: none;
+                    color: #2196F3;
+                    cursor: pointer;
+                    padding: 5px;
+                    font-size: 1.1em;
+                    opacity: 0.7;
+                    transition: opacity 0.2s;
+                    margin-top: -5px;
+                }
+                .edit-btn:hover {
+                    opacity: 1;
+                }
                 .logout-btn {
                     padding: 8px 16px;
                     background-color: #dc3545;
@@ -1605,10 +1619,143 @@ def note_detail(request: Request, audio_key: str):
                 .logout-btn:hover {
                     background-color: #c82333;
                 }
-                """
+                .edit-container {
+                    margin-top: 20px;
+                    width: 100%;
+                }
+                .edit-title {
+                    color: navy;
+                    font-size: 1.5em;
+                    margin-bottom: 20px;
+                }
+                .edit-form {
+                    width: 100%;
+                    background-color: white;
+                    border-radius: 8px;
+                }
+                .form-input {
+                    width: 100%;
+                    padding: 12px;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    font-size: 1.2em;
+                    color: navy;
+                    margin-bottom: 15px;
+                }
+                .form-textarea {
+                    width: 100%;
+                    min-height: 300px;
+                    padding: 12px;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 4px;
+                    font-size: 16px;
+                    line-height: 1.6;
+                    resize: vertical;
+                    color: #333;
+                    margin-bottom: 15px;
+                }
+                .form-buttons {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: flex-end;
+                }
+                .save-btn, .cancel-btn {
+                    padding: 10px 20px;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: background-color 0.2s;
+                }
+                .save-btn {
+                    background-color: #28a745;
+                    color: white;
+                }
+                .save-btn:hover {
+                    background-color: #218838;
+                }
+                .cancel-btn {
+                    background-color: #6c757d;
+                    color: white;
+                }
+                .cancel-btn:hover {
+                    background-color: #5a6268;
+                }
+                .note-container, .edit-container {
+                    transition: opacity 0.3s ease;
+                }
+            """
             ),
             Script(
                 """
+                function toggleEditMode(show) {
+                    const editContainer = document.querySelector('.edit-container');
+                    const noteContainer = document.querySelector('.note-container');
+                    
+                    if (show) {
+                        noteContainer.style.display = 'none';
+                        editContainer.style.display = 'block';
+                        // Focus on title input
+                        setTimeout(() => {
+                            document.getElementById('edit-title').focus();
+                        }, 50);
+                    } else {
+                        editContainer.style.display = 'none';
+                        noteContainer.style.display = 'block';
+                    }
+                }
+
+                async function saveNote(audioKey) {
+                    const title = document.getElementById('edit-title').value;
+                    const transcript = document.getElementById('edit-transcript').value;
+
+                    if (!title.trim() || !transcript.trim()) {
+                        alert('Title and transcript cannot be empty');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/edit-note/${audioKey}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                note_title: title,
+                                transcript_text: transcript
+                            })
+                        });
+
+                        if (response.ok) {
+                            // Update the displayed content
+                            document.querySelector('.note-title').textContent = title;
+                            document.querySelector('.note-transcription').textContent = transcript;
+                            toggleEditMode(false);
+                        } else {
+                            alert('Failed to save changes.');
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('Error saving changes.');
+                    }
+                }
+
+                // Add keyboard shortcuts
+                document.addEventListener('keydown', function(e) {
+                    const editContainer = document.querySelector('.edit-container');
+                    if (editContainer.style.display === 'block') {
+                        // Escape to cancel
+                        if (e.key === 'Escape') {
+                            toggleEditMode(false);
+                        }
+                        // Ctrl/Cmd + Enter to save
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            const audioKey = window.location.pathname.split('_')[1];
+                            saveNote(audioKey);
+                        }
+                    }
+                });
+
                 function deleteNote(audioKey) {
                     if (confirm('Are you sure you want to delete this note?')) {
                         fetch(`/delete-note/${audioKey}`, {
@@ -1627,45 +1774,80 @@ def note_detail(request: Request, audio_key: str):
                         });
                     }
                 }
-                """
+            """
             ),
         ),
         Body(
             Div(
-                Form(
-                    Button(
-                        "Logout",
-                        type="submit",
-                        cls="logout-btn",
-                    ),
-                    method="POST",
-                    action="/api/logout",
-                ),
-                style="position: absolute; top: 20px; right: 20px;",
-            ),
-            Div(
                 A("\u2190 Back to Notes", href="/notes", cls="back-button"),
+                # Note display container
                 Div(
                     Div(
-                        P(note[1], cls="note-date"),
-                        P(note[2], cls="note-title"),
-                        cls="note-info",
-                    ),
-                    Div(
-                        P(
-                            note[4] if note[4] else "0.00s",
-                            cls="note-duration",
+                        Div(
+                            P(note[1], cls="note-date"),
+                            P(note[2], cls="note-title"),
+                            cls="note-info",
                         ),
-                        Button(
-                            I(cls="fas fa-trash"),
-                            cls="delete-btn",
-                            onclick=f"deleteNote('{note[0]}')",
+                        Div(
+                            P(
+                                note[4] if note[4] else "0.00s",
+                                cls="note-duration",
+                            ),
+                            Button(
+                                I(cls="fas fa-edit"),
+                                cls="edit-btn",
+                                onclick="toggleEditMode(true)",
+                            ),
+                            Button(
+                                I(cls="fas fa-trash"),
+                                cls="delete-btn",
+                                onclick=f"deleteNote('{note[0]}')",
+                            ),
+                            cls="note-actions",
                         ),
-                        cls="note-actions",
+                        cls="note-header",
                     ),
-                    cls="note-header",
+                    P(note[3], cls="note-transcription"),
+                    cls="note-container",
                 ),
-                P(note[3], cls="note-transcription"),
+                # Edit form container
+                Div(
+                    Form(
+                        Input(
+                            type="text",
+                            id="edit-title",
+                            name="title",
+                            value=note[2],
+                            cls="form-input",
+                            placeholder="Enter title",
+                        ),
+                        Textarea(
+                            note[3],
+                            id="edit-transcript",
+                            name="transcript",
+                            cls="form-textarea",
+                            placeholder="Enter transcript",
+                        ),
+                        Div(
+                            Button(
+                                "Save",
+                                type="button",
+                                onclick=f"saveNote('{note[0]}')",
+                                cls="save-btn",
+                            ),
+                            Button(
+                                "Cancel",
+                                type="button",
+                                onclick="toggleEditMode(false)",
+                                cls="cancel-btn",
+                            ),
+                            cls="form-buttons",
+                        ),
+                        cls="edit-form",
+                    ),
+                    cls="edit-container",
+                    style="display: none;",
+                ),
                 cls="container",
             ),
         ),
@@ -1774,6 +1956,66 @@ async def delete_note(request: Request, audio_key: str):
         logging.error(f"Error deleting note: {str(e)}")
         conn.rollback()
         raise HTTPException(status_code=500, detail="Error deleting note")
+
+
+@rt("/edit-note/{audio_key}", methods=["POST"])
+async def edit_note(request: Request, audio_key: str):
+    user_id = get_current_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        # Get the updated content from request body
+        body = await request.json()
+        note_title = body.get("note_title")
+        transcript_text = body.get("transcript_text")
+        current_timestamp = datetime.now().isoformat()
+
+        # Switch to user schema
+        with use_user_schema(user_id):
+            # Verify note exists and belongs to user
+            cursor.execute(
+                "SELECT transcription FROM transcripts WHERE audio_key = %s",
+                (audio_key,),
+            )
+            result = cursor.fetchone()
+            if not result:
+                raise HTTPException(status_code=404, detail="Note not found")
+
+            # Get existing transcription or create new one
+            current_transcription = result[0] if result[0] else {}
+
+            # Update the transcription with new values and edited_at timestamp
+            updated_transcription = {
+                **current_transcription,
+                "note_title": note_title,
+                "transcript_text": transcript_text,
+                "edited_at": current_timestamp,
+            }
+
+            # Update the entire transcription JSON
+            cursor.execute(
+                """
+                UPDATE transcripts 
+                SET transcription = %s::jsonb
+                WHERE audio_key = %s
+                """,
+                (json.dumps(updated_transcription), audio_key),
+            )
+
+            conn.commit()
+            logger.info(f"Updated note content for audio_key {audio_key}")
+
+        return {"success": True, "audio_key": audio_key, "edited_at": current_timestamp}
+
+    except HTTPException:
+        raise
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON in request body")
+    except Exception as e:
+        logger.error(f"Error editing note: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Error editing note")
 
 
 serve()

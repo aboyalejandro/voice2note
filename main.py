@@ -754,7 +754,7 @@ def home(request):
                 style="color: navy; font-size: 2rem; font-weight: bold; text-align: center;",
             ),
             P(
-                "Find your transcribed notes effortlessly.",
+                "Record, upload, edit and find your transcribed notes effortlessly.",
                 style="color: navy; font-size: 1rem; text-align: center;",
             ),
             Div(
@@ -1953,7 +1953,7 @@ async def save_audio(
         # Generate keys and paths
         timestamp = int(datetime.now().timestamp())
         audio_key = f"{user_id}_{timestamp}"
-        s3_key = f"user_{user_id}/audios/{audio_key}.wav"
+        s3_key = f"user_{user_id}/audios/raw/{audio_key}.wav"
         s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
 
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")

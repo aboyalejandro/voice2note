@@ -1,9 +1,11 @@
 import os
 import boto3
-import json
-from datetime import datetime
 from openai import OpenAI
 from utils import get_transcript, run_llm, export_summary, save_to_postgresql
+from aws_lambda_powertools import Logger
+
+# Setup logging
+logger = Logger(service="v2n_summarize")
 
 # AWS clients
 s3_client = boto3.client("s3")
@@ -28,7 +30,7 @@ gpt_prompt_summary = """
     """
 gpt_prompt_title = """
     You are a voice note summarizing assistant that provides titles of no more than 5 words. 
-    Provide the output in the language of the text input, here's your text
+    Provide the output in the language of the text input without using quotation marks. Here's your text:
     """
 
 
@@ -38,11 +40,11 @@ def lambda_handler(event, context):
         bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
         object_key = event["Records"][0]["s3"]["object"]["key"]
 
-        print(f"New JSON detected: {object_key} in bucket {bucket_name}")
+        logger.info(f"New JSON detected: {object_key} in bucket {bucket_name}")
 
         # 1. Verificar si el objeto está en la ruta transcripts/raw/
         if "transcripts/raw/" not in object_key:
-            print(f"Skipping: {object_key} (not in transcripts/raw/).")
+            logger.info(f"Skipping: {object_key} (not in transcripts/raw/).")
             return
 
         # 2. Verificar estructura esperada: user_X/transcripts/raw/filename.json
@@ -55,7 +57,7 @@ def lambda_handler(event, context):
             or path_parts[1] != "transcripts"
             or path_parts[2] != "raw"
         ):
-            print(f"Skipping: {object_key} (invalid path structure).")
+            logger.info(f"Skipping: {object_key} (invalid path structure).")
             return
 
         user_path = path_parts[0]  # user_1
@@ -92,5 +94,5 @@ def lambda_handler(event, context):
         )
 
     except Exception as e:
-        print(f"Error in processing: {e}")
+        logger.error(f"Error in processing: {e}")
         raise

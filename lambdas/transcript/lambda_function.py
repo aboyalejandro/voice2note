@@ -1,7 +1,9 @@
-import os
 import boto3
-from datetime import datetime
 from utils import transcribe_audio
+from aws_lambda_powertools import Logger
+
+# Setup logging
+logger = Logger(service="v2n_transcript")
 
 # AWS clients
 s3_client = boto3.client("s3")
@@ -15,7 +17,7 @@ def lambda_handler(event, context):
         bucket_name = event["Records"][0]["s3"]["bucket"]["name"]
         object_key = event["Records"][0]["s3"]["object"]["key"]
 
-        print(f"New file detected: {object_key} in bucket {bucket_name}")
+        logger.info(f"New file detected: {object_key} in bucket {bucket_name}")
 
         # Validate path structure
         path_parts = object_key.split("/")
@@ -31,16 +33,18 @@ def lambda_handler(event, context):
         # Extract user_id for logging
         user_id = path_parts[0].replace("user_", "")
         audio_key = path_parts[2].replace(".wav", "")
-        print(f"Processing audio {audio_key} for user {user_id}")
+        logger.info(f"Processing audio {audio_key} for user {user_id}")
 
         # Start transcription
         transcription_response = transcribe_audio(
             bucket_name, object_key, transcribe_client
         )
 
-        print(f"Transcription job started for user {user_id}: {transcription_response}")
+        logger.info(
+            f"Transcription job started for user {user_id}: {transcription_response}"
+        )
         return {"statusCode": 200, "body": f"Processing started for {object_key}"}
 
     except Exception as e:
-        print(f"Error in processing: {e}")
+        logger.error(f"Error in processing: {e}")
         raise

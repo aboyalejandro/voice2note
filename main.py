@@ -11,7 +11,12 @@ import uuid
 from contextlib import contextmanager
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s - %(message)s",
+)
+
+logger = logging.getLogger("voice2note")
 
 # Load environment variables
 load_dotenv()
@@ -131,9 +136,11 @@ def get_common_styles():
 
 def create_user_schema(user_id: int):
     """Creates a new schema and required tables for a user"""
+    logger.info(f"Starting schema creation for user_id: {user_id}")
     try:
         # Create schema
         cursor.execute(f"CREATE SCHEMA IF NOT EXISTS user_{user_id}")
+        logger.info(f"Schema user_{user_id} created successfully")
 
         # Create audios table
         cursor.execute(
@@ -156,6 +163,8 @@ def create_user_schema(user_id: int):
         """
         )
 
+        logger.info(f"Audios table created for user_{user_id}")
+
         # Create transcripts table
         cursor.execute(
             f"""
@@ -171,6 +180,8 @@ def create_user_schema(user_id: int):
         """
         )
 
+        logger.info(f"Transcripts table created for user_{user_id}")
+
         # Create indexes
         cursor.execute(
             f"""
@@ -179,6 +190,8 @@ def create_user_schema(user_id: int):
             CREATE INDEX idx_transcripts_transcript_id ON user_{user_id}.transcripts USING btree (transcript_id)
         """
         )
+
+        logger.info(f"Indexes created for user_{user_id} schema")
 
         # Add foreign key constraints
         cursor.execute(
@@ -191,8 +204,10 @@ def create_user_schema(user_id: int):
         """
         )
 
+        logger.info(f"Foreign key constraints added for user_{user_id}")
+
         conn.commit()
-        logging.info(f"Created schema and tables for user_{user_id}")
+        logger.info(f"Schema creation completed successfully for user_{user_id}")
         return True
 
     except Exception as e:
@@ -322,16 +337,17 @@ def signup(request: Request):
     )
 
 
-# API endpoints for authentication
 @rt("/api/signup", methods=["POST"])
 async def api_signup(request):
     form = await request.form()
     username = form.get("username")
     password = form.get("password")
+    logger.info(f"Processing signup request for username: {username}")
 
     # Check if username already exists
     cursor.execute("SELECT username FROM users WHERE username = %s", (username,))
     if cursor.fetchone():
+        logger.warning(f"Signup failed - username already exists: {username}")
         return Html(
             Head(Title("Sign Up Error - Voice2Note"), Style(get_common_styles())),
             Body(
@@ -345,7 +361,6 @@ async def api_signup(request):
         )
 
     try:
-        # Hash password
         hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
 
         # Insert new user
@@ -358,9 +373,11 @@ async def api_signup(request):
             (username, hashed_password.decode("utf-8")),
         )
         user_id = cursor.fetchone()[0]
+        logger.info(f"User created successfully - user_id: {user_id}")
 
         # Create user schema and tables
         create_user_schema(user_id)
+        logger.info(f"User schema created successfully - user_id: {user_id}")
 
         # Create session
         session_id = str(uuid.uuid4())
@@ -374,6 +391,9 @@ async def api_signup(request):
             (session_id, user_id, expires_at),
         )
         conn.commit()
+        logger.info(
+            f"Session created successfully - user_id: {user_id}, session_id: {session_id}"
+        )
 
         response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(
@@ -388,6 +408,7 @@ async def api_signup(request):
 
     except Exception as e:
         conn.rollback()
+        logger.error(f"Error in signup process: {str(e)}", exc_info=True)
         logging.error(f"Error in signup: {str(e)}")
         return Html(
             Head(Title("Sign Up Error - Voice2Note"), Style(get_common_styles())),
@@ -414,6 +435,7 @@ async def api_login(request):
         (username,),
     )
     user = cursor.fetchone()
+    logger.info(f"Found user {username} in database.")
 
     if not user:
         return Html(
@@ -455,6 +477,7 @@ async def api_login(request):
             (session_id, user[0], expires_at),
         )
         conn.commit()
+        logger.info(f"Created new session: {session_id}.")
 
         response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(
@@ -492,13 +515,13 @@ async def api_logout(request):
             (session_id,),
         )
         conn.commit()
+        logger.info(f"Finished session: {session_id}.")
 
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(key="session_id")
     return response
 
 
-# Middleware for auth checking
 def get_current_user_id(request):
     session_id = request.cookies.get("session_id")
     if not session_id:
@@ -591,7 +614,6 @@ def reset_password(token: str):
     )
 
 
-# API endpoints for password reset
 @rt("/api/request-reset", methods=["POST"])
 async def request_reset(request):
     form = await request.form()
@@ -600,6 +622,7 @@ async def request_reset(request):
     # Check if user exists
     cursor.execute("SELECT user_id FROM users WHERE username = %s", (username,))
     user = cursor.fetchone()
+    logger.info(f"Validating password reset request for user_id {user}...")
 
     if not user:
         return Html(
@@ -628,9 +651,9 @@ async def request_reset(request):
         (reset_token, expires_at, username),
     )
     conn.commit()
+    logger.info(f"Saved password reset token for user_id {user}...")
 
-    # In a real application, you would send an email here
-    # For demonstration, we'll show the reset link
+    # Pending email recovery
     reset_link = f"/reset-password/{reset_token}"
 
     return Html(
@@ -672,6 +695,7 @@ async def reset_password_submit(request):
         (token,),
     )
     user = cursor.fetchone()
+    logger.info(f"Validating password reset token for user_id {user}...")
 
     if not user:
         return Html(
@@ -697,6 +721,7 @@ async def reset_password_submit(request):
         (hashed_password.decode("utf-8"), user[0]),
     )
     conn.commit()
+    logger.info(f"Password token for {user} has been completed.")
 
     return Html(
         Head(Title("Password Reset Success"), Style(get_common_styles())),
@@ -1024,7 +1049,7 @@ def home(request):
 def notes(request, start_date: str = None, end_date: str = None, keyword: str = None):
     user_id = get_current_user_id(request)
     if not user_id:
-        return RedirectResponse(url="/login", status_code=303)  # Base query
+        return RedirectResponse(url="/login", status_code=303)
 
     # Build query based on filters
     query = """
@@ -1706,10 +1731,10 @@ async def save_audio(
                 ),
             )
             conn.commit()
-            cursor.execute("SET search_path TO public")  # Reset schema
+            cursor.execute("SET search_path TO public")
             logging.info(f"Database record created for audio_key: {audio_key}")
         except Exception as e:
-            cursor.execute("SET search_path TO public")  # Reset schema
+            cursor.execute("SET search_path TO public")
             logging.error(
                 f"Database insertion failed for audio_key {audio_key}: {str(e)}"
             )
@@ -1733,7 +1758,6 @@ async def save_audio(
 
 @rt("/delete-note/{audio_key}")
 async def delete_note(request: Request, audio_key: str):
-    # Authentication check uses public schema
     user_id = get_current_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -1750,7 +1774,7 @@ async def delete_note(request: Request, audio_key: str):
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="Note not found")
 
-            # Soft delete both audio and transcript records
+            # Soft delete
             cursor.execute(
                 """
                 WITH audio_update AS (
@@ -1765,15 +1789,13 @@ async def delete_note(request: Request, audio_key: str):
                 (audio_key, audio_key),
             )
             conn.commit()
+            logger.info(f"Removed audio and transcript for audio_key {audio_key}.")
 
-        # Back in public schema - return response
         return {"success": True}
 
     except HTTPException:
-        # Re-raise HTTP exceptions for proper error handling
         raise
     except Exception as e:
-        # Log error and rollback transaction
         logging.error(f"Error deleting note: {str(e)}")
         conn.rollback()
         raise HTTPException(status_code=500, detail="Error deleting note")

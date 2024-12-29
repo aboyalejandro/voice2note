@@ -1,6 +1,10 @@
 from datetime import datetime
 import json
 import psycopg2
+from aws_lambda_powertools import Logger
+
+# Setup logging
+logger = Logger(service="v2n_summarize")
 
 
 def get_transcript(bucket_name: str, object_key: str, s3_client):
@@ -19,6 +23,7 @@ def run_llm(input: str, instruction: str, role: str, client):
             {"role": "user", "content": prompt},
         ],
     )
+    logger.info(f'Running LLM for transcript for input "{input[:25]}..."')
     return completion.choices[0].message.content
 
 
@@ -51,11 +56,11 @@ def export_summary(
             json.dump(json_object, json_file)
 
         s3_client.upload_file(json_file_path, bucket_name, output_path)
-        print(f"JSON file uploaded to {bucket_name}/{output_path}")
+        logger.info(f"JSON file uploaded to {bucket_name}/{output_path}")
 
         return json_object
     except Exception as e:
-        print(f"Error exporting summary: {e}")
+        logger.error(f"Error exporting summary: {e}")
         raise
 
 
@@ -91,7 +96,7 @@ def save_to_postgresql(
 
                 cur.execute(query, values)
                 conn.commit()
-                print(f"Data saved to PostgreSQL in schema {user_path}")
+                logger.info(f"Data saved to PostgreSQL in schema {user_path}")
     except Exception as e:
-        print(f"Error saving to PostgreSQL: {e}")
+        logger.error(f"Error saving to PostgreSQL: {e}")
         raise

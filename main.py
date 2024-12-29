@@ -929,9 +929,9 @@ def home(request):
                 ),
                 Script(
                     """
-                    let recordingDuration = 0;
                     let mediaRecorder;
                     let audioChunks = [];
+                    let recordingDuration = 0;
                     let recordInterval;
 
                     document.getElementById('upload').addEventListener('click', () => {
@@ -944,100 +944,89 @@ def home(request):
                             const audioUrl = URL.createObjectURL(file);
                             const audioPlayback = document.getElementById('audioPlayback');
                             audioPlayback.src = audioUrl;
-                            
-                            audioPlayback.onloadedmetadata = () => {
-                                window.audioBlob = file;
-                                window.audioType = 'uploaded';
-                                window.audioDuration = isFinite(audioPlayback.duration) ? audioPlayback.duration : 0;
-                                document.getElementById('save').disabled = false;
-                            };
+                            window.audioBlob = file;
+                            window.audioType = 'uploaded';
+                            document.getElementById('save').disabled = false;
                         }
                     });
 
                     document.getElementById('start').addEventListener('click', () => {
-                    navigator.mediaDevices.getUserMedia({ audio: true })
-                        .then(stream => {
-                            mediaRecorder = new MediaRecorder(stream);
-                            recordingDuration = 0;
-
-                            mediaRecorder.ondataavailable = event => {
-                                audioChunks.push(event.data);
-                            };
-
-                            mediaRecorder.onstop = () => {
-                                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                                audioChunks = [];
-                                const audioUrl = URL.createObjectURL(audioBlob);
-                                const audioPlayback = document.getElementById('audioPlayback');
-                                audioPlayback.src = audioUrl;
-
-                                clearInterval(recordInterval);
-                                document.getElementById('recordTimer').style.display = 'none';
+                        navigator.mediaDevices.getUserMedia({ audio: true })
+                            .then(stream => {
+                                mediaRecorder = new MediaRecorder(stream);
+                                recordingDuration = 0;
                                 
-                                window.audioBlob = audioBlob;
-                                window.audioType = 'recorded';
-                                window.audioDuration = recordingDuration;
-                                document.getElementById('save').disabled = false;
-                            };
+                                mediaRecorder.ondataavailable = event => {
+                                    audioChunks.push(event.data);
+                                };
 
-                            mediaRecorder.start();
-                            document.getElementById('start').disabled = true;
-                            document.getElementById('stop').disabled = false;
+                                mediaRecorder.onstop = () => {
+                                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                                    audioChunks = [];
+                                    const audioUrl = URL.createObjectURL(audioBlob);
+                                    const audioPlayback = document.getElementById('audioPlayback');
+                                    audioPlayback.src = audioUrl;
+                                    
+                                    clearInterval(recordInterval);
+                                    document.getElementById('recordTimer').style.display = 'none';
+                                    
+                                    window.audioBlob = audioBlob;
+                                    window.audioType = 'recorded';
+                                    document.getElementById('save').disabled = false;
+                                };
 
-                            const timerElement = document.getElementById('recordTimer');
-                            timerElement.style.display = 'block';
-                            
-                            recordInterval = setInterval(() => {
-                                recordingDuration++;
-                                const minutes = Math.floor(recordingDuration / 60);
-                                const displaySeconds = recordingDuration % 60;
-                                timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
-                            }, 1000);
-                        });
+                                mediaRecorder.start();
+                                document.getElementById('start').disabled = true;
+                                document.getElementById('stop').disabled = false;
+
+                                const timerElement = document.getElementById('recordTimer');
+                                timerElement.style.display = 'block';
+                                
+                                recordInterval = setInterval(() => {
+                                    recordingDuration++;
+                                    const minutes = Math.floor(recordingDuration / 60);
+                                    const displaySeconds = recordingDuration % 60;
+                                    timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
+                                }, 1000);
+                            });
                     });
 
                     document.getElementById('stop').addEventListener('click', () => {
-                    mediaRecorder.stop();
-                    document.getElementById('start').disabled = false;
-                    document.getElementById('stop').disabled = true;
-                });
-
-                document.getElementById('save').addEventListener('click', () => {
-                    const audioBlob = window.audioBlob;
-                    const audioType = window.audioType;
-                    const duration = window.audioType === 'recorded' ? recordingDuration : (isFinite(window.audioDuration) ? window.audioDuration : 0);
-                    
-                    if (!audioBlob) {
-                        alert('No audio to save!');
-                        return;
-                    }
-
-                    // Convert duration to HH:MM:SS format
-                    const hours = Math.floor(duration / 3600);
-                    const minutes = Math.floor((duration % 3600) / 60);
-                    const seconds = Math.floor(duration % 60);
-                    const formattedDuration = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-                    const formData = new FormData();
-                    const timestamp = Math.floor(Date.now() / 1000);
-                    const filename = `recording_${timestamp}.wav`;
-                    formData.append('audio_file', audioBlob, filename);
-                    formData.append('audio_type', audioType);
-                    formData.append('duration', formattedDuration);
-
-                    fetch('/save-audio', {
-                        method: 'POST',
-                        body: formData,
-                    }).then(response => {
-                        if (response.ok) {
-                            response.json().then(data => {
-                                alert(`Audio saved successfully! It will show up in the Notes page shortly.`);
-                            });
-                        } else {
-                            alert('Failed to save audio.');
+                        if (mediaRecorder && mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                            document.getElementById('start').disabled = false;
+                            document.getElementById('stop').disabled = true;
                         }
                     });
-                });
+
+                    document.getElementById('save').addEventListener('click', () => {
+                        const audioBlob = window.audioBlob;
+                        const audioType = window.audioType;
+                        
+                        if (!audioBlob) {
+                            alert('No audio to save!');
+                            return;
+                        }
+
+                        const formData = new FormData();
+                        const timestamp = Math.floor(Date.now() / 1000);
+                        const filename = `recording_${timestamp}.wav`;
+                        formData.append('audio_file', audioBlob, filename);
+                        formData.append('audio_type', audioType);
+
+                        fetch('/save-audio', {
+                            method: 'POST',
+                            body: formData,
+                        }).then(response => {
+                            if (response.ok) {
+                                response.json().then(data => {
+                                    alert('Audio saved successfully! It will show up in the Notes page shortly.');
+                                });
+                            } else {
+                                alert('Failed to save audio.');
+                            }
+                        });
+                    });
                 """
                 ),
             ),
@@ -1475,7 +1464,7 @@ def note_detail(request: Request, audio_key: str):
                 TO_CHAR(audios.created_at, 'MM/DD') as note_date,
                 COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
                 COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
-                metadata->>'duration' as duration
+                COALESCE(metadata->>'duration', '00:00:00') as duration
             FROM audios
             LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
             WHERE audios.audio_key = %s
@@ -1688,21 +1677,12 @@ async def save_audio(
     request: Request,
     audio_file: UploadFile,
     audio_type: str = Form(...),
-    duration: str = Form(...),
 ):
     user_id = get_current_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        contents = await audio_file.read()
-
-        # Generate metadata
-        metadata = {
-            "duration": duration,
-            "file_size": f"{len(contents) / 1024 / 1024:.2f}MB",
-        }
-
         # Generate keys and paths
         timestamp = int(datetime.now().timestamp())
         audio_key = f"{user_id}_{timestamp}"
@@ -1713,35 +1693,30 @@ async def save_audio(
 
         # Insert record using user schema
         try:
-            cursor.execute(f"SET search_path TO user_{user_id}")
-            cursor.execute(
-                """
+            query = """
                 INSERT INTO audios 
-                (audio_key, user_id, s3_object_url, audio_type, created_at, metadata) 
-                VALUES (%s, %s, %s, %s, %s, %s) 
+                (audio_key, user_id, s3_object_url, audio_type, created_at) 
+                VALUES (%s, %s, %s, %s, %s) 
                 RETURNING audio_key
-                """,
-                (
-                    audio_key,
-                    user_id,
-                    s3_url,
-                    audio_type,
-                    datetime.now(),
-                    json.dumps(metadata),
-                ),
-            )
-            conn.commit()
-            cursor.execute("SET search_path TO public")
-            logging.info(f"Database record created for audio_key: {audio_key}")
+            """
+            query_params = [
+                audio_key,
+                user_id,
+                s3_url,
+                audio_type,
+                datetime.now(),
+            ]
+            with use_user_schema(user_id):
+                cursor.execute(query, query_params)
+                conn.commit()
+                logging.info(f"Database record created for audio_key: {audio_key}")
         except Exception as e:
-            cursor.execute("SET search_path TO public")
             logging.error(
                 f"Database insertion failed for audio_key {audio_key}: {str(e)}"
             )
             raise
 
         # Upload to S3
-        audio_file.file.seek(0)
         try:
             s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
             logging.info(f"Audio file uploaded to S3: {s3_key}")

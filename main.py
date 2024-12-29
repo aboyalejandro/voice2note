@@ -1151,7 +1151,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
             P(note[3], cls="note-preview"),
             Div(
                 A(
-                    Button("View Note", cls="view-btn"),
+                    Button("View", cls="view-btn"),
                     href=f"/note_{note[0]}",
                 ),
                 style="text-align: right; margin-top: 10px;",
@@ -1442,7 +1442,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 style="position: absolute; top: 20px; right: 20px;",
             ),
             Div(
-                A("\u2190 Back", href="/", cls="back-button"),
+                A("\u2190", href="/", cls="back-button"),
                 Div(H1("Your Last Notes", cls="title")),
                 Div(search_form, *note_cards, cls="container"),
             ),
@@ -1852,7 +1852,7 @@ def note_detail(request: Request, audio_key: str):
         ),
         Body(
             Div(
-                A("\u2190 Back to Notes", href="/notes", cls="back-button"),
+                A("\u2190", href="/notes", cls="back-button"),
                 # Note display container
                 Div(
                     Div(

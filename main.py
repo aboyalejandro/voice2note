@@ -9,6 +9,8 @@ import json
 import bcrypt
 import uuid
 from contextlib import contextmanager
+import io
+from starlette.responses import StreamingResponse
 
 # Configure logging
 logging.basicConfig(
@@ -1684,6 +1686,25 @@ def note_detail(request: Request, audio_key: str):
                 .note-container, .edit-container {
                     transition: opacity 0.3s ease;
                 }
+                .play-btn {
+                    background: none;
+                    border: none;
+                    color: #4CAF50;
+                    cursor: pointer;
+                    padding: 5px;
+                    font-size: 1.1em;
+                    opacity: 0.7;
+                    transition: opacity 0.2s;
+                    margin-top: -5px;
+                }
+                .play-btn:hover {
+                    opacity: 1;
+                }
+                .audio-player {
+                    width: 100%;
+                    max-width: 300px;
+                    margin-right: 10px;
+                }
             """
             ),
             Script(
@@ -1774,6 +1795,58 @@ def note_detail(request: Request, audio_key: str):
                         });
                     }
                 }
+                
+                let audioPlayer = null;
+                let isPlaying = false;
+
+                async function toggleAudio(audioKey) {
+                    const playBtn = document.getElementById('play-btn');
+                    const durationDisplay = document.getElementById('duration-display');
+                    const audioPlayer = document.getElementById('audio-player');
+                    
+                    if (!isPlaying) {
+                        try {
+                            playBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                            
+                            // Fetch the audio file
+                            const response = await fetch(`/get-audio/${audioKey}`);
+                            if (!response.ok) throw new Error('Failed to fetch audio');
+                            
+                            const blob = await response.blob();
+                            const audioUrl = URL.createObjectURL(blob);
+                            
+                            // Update audio player
+                            audioPlayer.src = audioUrl;
+                            audioPlayer.style.display = 'block';
+                            durationDisplay.style.display = 'none';
+                            
+                            // Play audio
+                            await audioPlayer.play();
+                            playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                            isPlaying = true;
+                            
+                            // Handle audio end
+                            audioPlayer.onended = () => {
+                                playBtn.innerHTML = '<i class="fas fa-play"></i>';
+                                audioPlayer.style.display = 'none';
+                                durationDisplay.style.display = 'block';
+                                isPlaying = false;
+                            };
+                        } catch (error) {
+                            console.error('Error playing audio:', error);
+                            alert('Failed to play audio');
+                            playBtn.innerHTML = '<i class="fas fa-play"></i>';
+                            isPlaying = false;
+                        }
+                    } else {
+                        // Pause audio
+                        audioPlayer.pause();
+                        playBtn.innerHTML = '<i class="fas fa-play"></i>';
+                        audioPlayer.style.display = 'none';
+                        durationDisplay.style.display = 'block';
+                        isPlaying = false;
+                    }
+                }
             """
             ),
         ),
@@ -1792,6 +1865,18 @@ def note_detail(request: Request, audio_key: str):
                             P(
                                 note[4] if note[4] else "0.00s",
                                 cls="note-duration",
+                                id="duration-display",
+                            ),
+                            Audio(
+                                id="audio-player",
+                                cls="audio-player",
+                                style="display: none;",
+                            ),
+                            Button(
+                                I(cls="fas fa-play"),
+                                cls="play-btn",
+                                id="play-btn",
+                                onclick=f"toggleAudio('{note[0]}')",
                             ),
                             Button(
                                 I(cls="fas fa-edit"),
@@ -2016,6 +2101,54 @@ async def edit_note(request: Request, audio_key: str):
         logger.error(f"Error editing note: {str(e)}")
         conn.rollback()
         raise HTTPException(status_code=500, detail="Error editing note")
+
+
+@rt("/get-audio/{audio_key}")
+def get_audio(request: Request, audio_key: str):
+    user_id = get_current_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        # Get S3 object URL from database
+        with use_user_schema(user_id):
+            cursor.execute(
+                "SELECT s3_object_url FROM audios WHERE audio_key = %s AND deleted_at IS NULL",
+                (audio_key,),
+            )
+            result = cursor.fetchone()
+
+            if not result:
+                raise HTTPException(status_code=404, detail="Audio not found")
+
+            # Extract the S3 key from the URL
+            s3_url = result[0]
+            # Get everything after the bucket name in the path
+            s3_key = "/".join(s3_url.split("/")[3:])
+
+            # Get the audio file from S3
+            try:
+                response = s3.get_object(Bucket=AWS_S3_BUCKET, Key=s3_key)
+                audio_data = response["Body"].read()
+
+                # Return the audio file as a streaming response
+                return StreamingResponse(
+                    io.BytesIO(audio_data),
+                    media_type="audio/wav",
+                    headers={
+                        "Accept-Ranges": "bytes",
+                        "Content-Disposition": f'attachment; filename="{audio_key}.wav"',
+                    },
+                )
+            except Exception as e:
+                logger.error(f"Error fetching audio from S3: {str(e)}")
+                raise HTTPException(status_code=500, detail="Error fetching audio file")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_audio: {str(e)}")
+        raise HTTPException(status_code=500, detail="Server error")
 
 
 serve()

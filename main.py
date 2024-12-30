@@ -1954,7 +1954,7 @@ async def save_audio(
         timestamp = int(datetime.now().timestamp())
         audio_key = f"{user_id}_{timestamp}"
         s3_key = f"user_{user_id}/audios/raw/{audio_key}.wav"
-        s3_url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+        s3_url = f"s3://{AWS_S3_BUCKET}//{s3_key}"
 
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
 
@@ -2113,7 +2113,7 @@ def get_audio(request: Request, audio_key: str):
         # Get S3 object URL from database
         with use_user_schema(user_id):
             cursor.execute(
-                "SELECT s3_object_url FROM audios WHERE audio_key = %s AND deleted_at IS NULL",
+                "SELECT metadata->>'s3_compressed_audio_url' FROM audios WHERE audio_key = %s AND deleted_at IS NULL",
                 (audio_key,),
             )
             result = cursor.fetchone()

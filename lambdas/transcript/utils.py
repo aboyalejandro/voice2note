@@ -41,3 +41,14 @@ def transcribe_audio(bucket_name: str, object_key: str, client):
     except Exception as e:
         logger.error(f"Error during transcription: {e}")
         raise
+
+
+# Publish to SNS
+def publish_to_sns(bucket_name, object_key, sns_topic_arn):
+    message = {"bucket_name": bucket_name, "object_key": object_key}
+    sns_client.publish(
+        TopicArn=SNS_TOPIC_ARN,
+        Message=json.dumps(message),
+        Subject=f"New audio available in {object_key}",
+    )
+    logger.info(f"Published message to SNS: {message}")

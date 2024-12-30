@@ -30,7 +30,7 @@ def run_llm(input: str, instruction: str, role: str, client):
 # Generate JSON output and upload to S3
 def export_summary(
     bucket_name: str,
-    user_path: str,  # Changed from user_id to user_path
+    user_path: str,
     audio_key: str,
     transcript_text: str,
     summary_text: str,
@@ -46,7 +46,6 @@ def export_summary(
         output_path = f"{user_path}/transcripts/processed/{json_file_name}"
 
         json_object = {
-            "s3_object_url": f"s3://{bucket_name}/{output_path}",
             "note_title": note_title,
             "transcript_text": transcript_text,
             "summary_text": summary_text,
@@ -58,14 +57,14 @@ def export_summary(
         s3_client.upload_file(json_file_path, bucket_name, output_path)
         logger.info(f"JSON file uploaded to {bucket_name}/{output_path}")
 
-        return json_object
+        return [output_path, json_object]
     except Exception as e:
         logger.error(f"Error exporting summary: {e}")
         raise
 
 
 def save_to_postgresql(
-    user_path: str,  # New parameter for schema selection
+    user_path: str,
     audio_key: str,
     transcript_results: dict,
     host: str,
@@ -90,8 +89,8 @@ def save_to_postgresql(
                 """
                 values = (
                     audio_key,
-                    transcript_results["s3_object_url"],
-                    json.dumps(transcript_results),
+                    transcript_results[0],
+                    json.dumps(transcript_results[1]),
                 )
 
                 cur.execute(query, values)

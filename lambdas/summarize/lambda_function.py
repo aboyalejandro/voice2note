@@ -42,15 +42,15 @@ def lambda_handler(event, context):
 
         logger.info(f"New JSON detected: {object_key} in bucket {bucket_name}")
 
-        # 1. Verificar si el objeto está en la ruta transcripts/raw/
+        # Validate path
         if "transcripts/raw/" not in object_key:
             logger.info(f"Skipping: {object_key} (not in transcripts/raw/).")
             return
 
-        # 2. Verificar estructura esperada: user_X/transcripts/raw/filename.json
+        # Validate path structure
         path_parts = object_key.split(
             "/"
-        )  # ej. ['user_1','transcripts','raw','archivo.json']
+        )  # ej. ['user_1','transcripts','raw','file.json']
         if (
             len(path_parts) != 4
             or not path_parts[0].startswith("user_")
@@ -61,19 +61,19 @@ def lambda_handler(event, context):
             return
 
         user_path = path_parts[0]  # user_1
-        audio_key = path_parts[3].replace(".json", "")  # archivo (sin extensión)
+        audio_key = path_parts[3].replace(".json", "")  # file (without extension)
 
-        # 3. Procesar el transcript
+        # Process transcription
         transcript_text = get_transcript(bucket_name, object_key, s3_client)
         summary_text = run_llm(
             transcript_text, gpt_prompt_summary, gpt_rol, open_ai_client
         )
         note_title = run_llm(summary_text, gpt_prompt_title, gpt_rol, open_ai_client)
 
-        # 4. Exportar a processed/
+        # Export processing
         transcript_results = export_summary(
             bucket_name,
-            user_path,  # Pass full user_path instead of just ID
+            user_path,
             audio_key,
             transcript_text,
             summary_text,
@@ -81,9 +81,9 @@ def lambda_handler(event, context):
             s3_client,
         )
 
-        # 5. Guardar en PostgreSQL (en el schema del usuario)
+        # Save to User Schema
         save_to_postgresql(
-            user_path,  # user_1
+            user_path,
             audio_key,
             transcript_results,
             DB_HOST,

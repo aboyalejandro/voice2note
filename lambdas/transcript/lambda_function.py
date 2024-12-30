@@ -1,5 +1,5 @@
 import boto3
-from utils import transcribe_audio
+from utils import transcribe_audio, publish_to_sns
 from aws_lambda_powertools import Logger
 
 # Setup logging
@@ -8,6 +8,8 @@ logger = Logger(service="v2n_transcript")
 # AWS clients
 s3_client = boto3.client("s3")
 transcribe_client = boto3.client("transcribe")
+sns_client = boto3.client("sns")
+sns_topic_arn = os.getenv("SNS_TOPIC_ARN")
 
 
 # Lambda handler
@@ -43,6 +45,10 @@ def lambda_handler(event, context):
         logger.info(
             f"Transcription job started for user {user_id}: {transcription_response}"
         )
+
+        # Publish Payload
+        publish_to_sns(bucket_name, object_key, sns_topic_arn)
+
         return {"statusCode": 200, "body": f"Processing started for {object_key}"}
 
     except Exception as e:

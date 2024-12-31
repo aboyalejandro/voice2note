@@ -1681,12 +1681,6 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
         cls="search-wrapper",
     )
 
-    def truncate_summary(text, max_length=200):
-        """Truncate text to specified length and add ellipsis if needed"""
-        if len(text) <= max_length:
-            return text
-        return text[: max_length - 3] + "..."
-
     note_cards = [
         Div(
             Div(
@@ -1704,7 +1698,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 ),
                 cls="note-header",
             ),
-            P(truncate_summary(note[3]), cls="note-preview"),
+            P(note[3], cls="note-preview"),
             Div(
                 A(
                     Button("\u2192", cls="view-btn"),
@@ -2103,8 +2097,7 @@ def note_detail(request: Request, audio_key: str):
                 audios.audio_key,
                 TO_CHAR(audios.created_at, 'MM/DD') as note_date,
                 COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
-                COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
-                COALESCE(concat(split_part(metadata->>'duration',':',2), 'm ', split_part(split_part(metadata->>'duration',':',3),'.',1) , 's') , '00:00:00') as duration
+                COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription
             FROM audios
             LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
             WHERE audios.audio_key = %s

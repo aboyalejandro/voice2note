@@ -9,6 +9,12 @@ import subprocess
 logger = Logger(service="v2n_audio_metadata_processing")
 
 
+def validate_file_extension(object_key):
+    valid_extensions = [".mp3", ".wav", ".webm"]
+    _, extension = os.path.splitext(object_key)
+    return extension.lower() in valid_extensions, extension.lower().replace(".", "")
+
+
 def get_audio_metadata(input_file, ffmpeg_path):
     """
     Extract metadata from an audio file using ffmpeg.

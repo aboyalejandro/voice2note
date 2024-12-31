@@ -2,7 +2,7 @@ import boto3
 import json
 import os
 from aws_lambda_powertools import Logger
-from utils import convert_to_amr, update_metadata
+from utils import convert_to_webm, validate_file_extension, update_metadata
 
 # Setup logging
 logger = Logger(service="v2n_audio_compression")
@@ -46,30 +46,43 @@ def lambda_handler(event, context):
             or path_parts[2] != "raw"
         ):
             raise ValueError(
-                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename.wav"
+                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename"
             )
 
         user_id = path_parts[0].replace("user_", "")
-        audio_key = path_parts[3].replace(".wav", "")
+        audio_key, extension = os.path.splitext(path_parts[3])
+
+        # Validate file extension
+        if not validate_file_extension(object_key):
+            raise ValueError(
+                f"Invalid file extension for {object_key}. Only .mp3, .wav, and .webm are supported."
+            )
 
         # Download file from S3 to /tmp
-        local_file_path = f"/tmp/{audio_key}.wav"
+        local_file_path = f"/tmp/{audio_key}{extension}"
         s3_client.download_file(bucket_name, object_key, local_file_path)
 
-        # Convert to AMR
-        amr_file_path = f"/tmp/{audio_key}.amr"
-        convert_to_amr(local_file_path, amr_file_path, FFMPEG_PATH)
+        # Convert to WebM if necessary
+        if extension.lower() != ".webm":
+            webm_file_path = f"/tmp/{audio_key}.webm"
+            convert_to_webm(local_file_path, webm_file_path, FFMPEG_PATH)
+        else:
+            logger.info(
+                f"File extension is already {extension.lower()}, no need for conversion."
+            )
+            webm_file_path = local_file_path  # No conversion needed
 
-        # Upload converted AMR file to S3
-        compressed_key = f"user_{user_id}/audios/compressed/{audio_key}.amr"
-        s3_client.upload_file(amr_file_path, bucket_name, compressed_key)
-        logger.info(f"Converted AMR file saved to S3 at {compressed_key}")
-        compressed_audio_url = f"s3:{bucket_name}/{compressed_key}"
-        # Update Metada with compressed audio URL Path
+        # Upload converted Webm file to S3
+        compressed_key = f"user_{user_id}/audios/compressed/{audio_key}.webm"
+        s3_client.upload_file(webm_file_path, bucket_name, compressed_key)
+        logger.info(f"SavedWebM file saved to S3 at {compressed_key}")
+        compressed_audio_url = f"s3://{bucket_name}/{compressed_key}"
+
+        # Update metadata with compressed audio URL path
         update_metadata(
             user_id,
             audio_key,
-            compressed_audio_url,
+            {"s3_compressed_audio_url": compressed_audio_url},
             DB_USER,
             DB_PASSWORD,
             DB_NAME,
@@ -77,7 +90,7 @@ def lambda_handler(event, context):
             DB_PORT,
         )
 
-        return {"statusCode": 200, "body": f"Audio {object_key} converted to AMR"}
+        return {"statusCode": 200, "body": f"Audio {object_key} converted to WebM"}
 
     except Exception as e:
         logger.error(f"Error processing file: {e}")

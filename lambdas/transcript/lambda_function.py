@@ -1,6 +1,6 @@
 import os
 import boto3
-from utils import transcribe_audio, publish_to_sns
+from utils import validate_file_extension, transcribe_audio, publish_to_sns
 from aws_lambda_powertools import Logger
 
 # Setup logging
@@ -31,17 +31,24 @@ def lambda_handler(event, context):
             or path_parts[2] != "raw"
         ):
             raise ValueError(
-                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename.wav"
+                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename"
+            )
+
+        # Validate file extension
+        is_valid, media_format = validate_file_extension(object_key)
+        if not is_valid:
+            raise ValueError(
+                f"Invalid file extension for {object_key}. Only .mp3, .wav, and .webm are supported."
             )
 
         # Extract user_id for logging
         user_id = path_parts[0].replace("user_", "")
-        audio_key = path_parts[2].replace(".wav", "")
+        audio_key = path_parts[3].replace(f".{media_format}", "")
         logger.info(f"Processing audio {audio_key} for user {user_id}")
 
-        # Start transcription
+        # Start transcription with dynamic media format
         transcription_response = transcribe_audio(
-            bucket_name, object_key, transcribe_client
+            bucket_name, object_key, transcribe_client, media_format
         )
 
         logger.info(

@@ -2,7 +2,11 @@ import os
 import boto3
 import json
 from aws_lambda_powertools import Logger
-from utils import get_audio_metadata, save_metadata_to_postgresql
+from utils import (
+    validate_file_extension,
+    get_audio_metadata,
+    save_metadata_to_postgresql,
+)
 
 # Setup logging
 logger = Logger(service="v2n_audio_metadata_processing")
@@ -31,11 +35,6 @@ def lambda_handler(event, context):
 
         logger.info(f"New file detected: {object_key} in bucket {bucket_name}")
 
-        # Validate path
-        if "audios/raw/" not in object_key:
-            logger.info(f"Skipping: {object_key} (not in audios/raw/).")
-            return
-
         # Validate path structure
         path_parts = object_key.split("/")
         if (
@@ -45,14 +44,23 @@ def lambda_handler(event, context):
             or path_parts[2] != "raw"
         ):
             raise ValueError(
-                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename.wav"
+                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename"
             )
 
+        # Validate file extension
+        is_valid, media_format = validate_file_extension(object_key)
+        if not is_valid:
+            raise ValueError(
+                f"Invalid file extension for {object_key}. Only .mp3, .wav, and .webm are supported."
+            )
+
+        # Extract user_id for logging
         user_id = path_parts[0].replace("user_", "")
-        audio_key = path_parts[3].replace(".wav", "")
+        audio_key = path_parts[3].replace(f".{media_format}", "")
+        logger.info(f"Processing audio {audio_key} for user {user_id}")
 
         # Download file from S3 to /tmp
-        local_file_path = f"/tmp/{audio_key}.wav"
+        local_file_path = f"/tmp/{audio_key}.{media_format}"
         s3_client.download_file(bucket_name, object_key, local_file_path)
 
         # Extract metadata

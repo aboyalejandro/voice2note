@@ -133,6 +133,239 @@ def get_common_styles():
         font-size: 14px;
         text-align: center;
     }
+
+    /* Common responsive adjustments */
+    @media (max-width: 768px) {
+        body {
+            padding: 10px;
+        }
+        
+        .container {
+            width: 95%;
+            padding: 15px;
+            margin: 10px auto;
+        }
+
+        /* Auth pages responsive styles */
+        .auth-container {
+            width: 95%;
+            padding: 15px;
+            margin: 10px;
+        }
+
+        .auth-title {
+            font-size: 20px;
+        }
+
+        .form-input {
+            padding: 8px;
+            font-size: 14px;
+        }
+
+        .auth-btn {
+            padding: 10px 15px;
+            font-size: 14px;
+        }
+
+        /* Home page responsive styles */
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .record-btn, .stop-btn, .upload-btn {
+            font-size: 32px;
+            padding: 8px;
+            margin: 0;
+        }
+
+        .audio-player {
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .save-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .save-btn, .notes-btn {
+            width: 100%;
+            max-width: 200px;
+        }
+
+        /* Notes page responsive styles */
+        .note {
+            padding: 12px;
+        }
+
+        .note-header {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .note-actions {
+            justify-content: flex-start;
+            width: 100%;
+        }
+
+        .note-info {
+            width: 100%;
+        }
+
+        .note-title {
+            font-size: 16px;
+            word-break: break-word;
+        }
+
+        .note-preview {
+            font-size: 13px;
+        }
+
+        .search-container {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .date-field {
+            flex-direction: column;
+            width: 100%;
+        }
+
+        .date-input {
+            width: 100%;
+        }
+
+        .keyword-field {
+            width: 100%;
+        }
+
+        .button-field {
+            flex-direction: row;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .search-btn, .clear-btn {
+            flex: 1;
+        }
+
+        /* Note detail page responsive styles */
+        .note-transcription {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        .form-textarea {
+            min-height: 200px;
+            font-size: 14px;
+        }
+
+        .form-buttons {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .save-btn, .cancel-btn {
+            width: 100%;
+        }
+
+        .back-button {
+            margin-top: 20px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            padding: 8px 12px;
+        }
+
+        /* Audio player responsive styles */
+        .audio-player {
+            width: 100%;
+            max-width: none;
+        }
+
+        /* Logout button positioning */
+        .logout-btn {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+    }
+
+    /* Small phones */
+    @media (max-width: 380px) {
+        .auth-title {
+            font-size: 18px;
+        }
+
+        .record-btn, .stop-btn, .upload-btn {
+            font-size: 28px;
+            padding: 6px;
+        }
+
+        .note-title {
+            font-size: 14px;
+        }
+
+        .note-preview {
+            font-size: 12px;
+        }
+    }
+
+    /* Landscape orientation adjustments */
+    @media (max-height: 600px) and (orientation: landscape) {
+        body {
+            height: auto;
+            min-height: 100vh;
+        }
+
+        .container {
+            margin: 60px auto;
+        }
+
+        .audio-wrapper {
+            margin: 10px 0;
+        }
+
+        .controls {
+            margin: 10px 0;
+        }
+    }
+
+    /* Dark mode detection */
+    @media (prefers-color-scheme: dark) {
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .container, .auth-container {
+            background-color: #2d2d2d;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .note {
+            background-color: #3d3d3d;
+        }
+
+        .note-title {
+            color: #66b3ff;
+        }
+
+        .form-input, .form-textarea {
+            background-color: #3d3d3d;
+            color: #ffffff;
+            border-color: #4d4d4d;
+        }
+
+        .search-container {
+            background-color: #3d3d3d;
+        }
+    }
     """
 
 
@@ -232,6 +465,7 @@ def use_user_schema(user_id: int):
 def login(request: Request):
     return Html(
         Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title("Login - Voice2Note"),
             Link(
                 rel="stylesheet",
@@ -288,6 +522,7 @@ def login(request: Request):
 def signup(request: Request):
     return Html(
         Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title("Sign Up - Voice2Note"),
             Link(
                 rel="stylesheet",
@@ -351,7 +586,11 @@ async def api_signup(request):
     if cursor.fetchone():
         logger.warning(f"Signup failed - username already exists: {username}")
         return Html(
-            Head(Title("Sign Up Error - Voice2Note"), Style(get_common_styles())),
+            Head(
+                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+                Title("Sign Up Error - Voice2Note"),
+                Style(get_common_styles()),
+            ),
             Body(
                 Div(
                     H1("Sign Up Error", cls="auth-title"),
@@ -413,7 +652,11 @@ async def api_signup(request):
         logger.error(f"Error in signup process: {str(e)}", exc_info=True)
         logging.error(f"Error in signup: {str(e)}")
         return Html(
-            Head(Title("Sign Up Error - Voice2Note"), Style(get_common_styles())),
+            Head(
+                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+                Title("Sign Up Error - Voice2Note"),
+                Style(get_common_styles()),
+            ),
             Body(
                 Div(
                     H1("Sign Up Error", cls="auth-title"),
@@ -441,7 +684,11 @@ async def api_login(request):
 
     if not user:
         return Html(
-            Head(Title("Login Error - Voice2Note"), Style(get_common_styles())),
+            Head(
+                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+                Title("Login Error - Voice2Note"),
+                Style(get_common_styles()),
+            ),
             Body(
                 Div(
                     H1("Login Error", cls="auth-title"),
@@ -456,7 +703,13 @@ async def api_login(request):
         # Verify password
         if not bcrypt.checkpw(password.encode("utf-8"), user[2].encode("utf-8")):
             return Html(
-                Head(Title("Login Error - Voice2Note"), Style(get_common_styles())),
+                Head(
+                    Meta(
+                        name="viewport", content="width=device-width, initial-scale=1.0"
+                    ),
+                    Title("Login Error - Voice2Note"),
+                    Style(get_common_styles()),
+                ),
                 Body(
                     Div(
                         H1("Login Error", cls="auth-title"),
@@ -496,7 +749,11 @@ async def api_login(request):
         logging.error(f"Error in login: {str(e)}")
         conn.rollback()
         return Html(
-            Head(Title("Login Error - Voice2Note"), Style(get_common_styles())),
+            Head(
+                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+                Title("Login Error - Voice2Note"),
+                Style(get_common_styles()),
+            ),
             Body(
                 Div(
                     H1("Login Error", cls="auth-title"),
@@ -546,6 +803,7 @@ def get_current_user_id(request):
 def forgot_password():
     return Html(
         Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title("Reset Password - Voice2Note"),
             Style(get_common_styles()),
         ),
@@ -585,6 +843,7 @@ def forgot_password():
 def reset_password(token: str):
     return Html(
         Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title("Set New Password - Voice2Note"),
             Style(get_common_styles()),
         ),
@@ -628,7 +887,11 @@ async def request_reset(request):
 
     if not user:
         return Html(
-            Head(Title("Reset Password Error"), Style(get_common_styles())),
+            Head(
+                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+                Title("Reset Password Error"),
+                Style(get_common_styles()),
+            ),
             Body(
                 Div(
                     H1("Reset Password Error", cls="auth-title"),
@@ -659,7 +922,11 @@ async def request_reset(request):
     reset_link = f"/reset-password/{reset_token}"
 
     return Html(
-        Head(Title("Reset Password"), Style(get_common_styles())),
+        Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+            Title("Reset Password"),
+            Style(get_common_styles()),
+        ),
         Body(
             Div(
                 H1("Reset Password", cls="auth-title"),
@@ -701,7 +968,11 @@ async def reset_password_submit(request):
 
     if not user:
         return Html(
-            Head(Title("Reset Error"), Style(get_common_styles())),
+            Head(
+                Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+                Title("Reset Error"),
+                Style(get_common_styles()),
+            ),
             Body(
                 Div(
                     H1("Reset Error", cls="auth-title"),
@@ -726,7 +997,11 @@ async def reset_password_submit(request):
     logger.info(f"Password token for {user} has been completed.")
 
     return Html(
-        Head(Title("Password Reset Success"), Style(get_common_styles())),
+        Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+            Title("Password Reset Success"),
+            Style(get_common_styles()),
+        ),
         Body(
             Div(
                 H1("Password Reset Success", cls="auth-title"),
@@ -747,15 +1022,24 @@ def home(request):
     if not user_id:
         return RedirectResponse(url="/login", status_code=303)
     return Html(
-        Head(Title("Voice2Note")),
+        Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+            Title("Voice2Note"),
+        ),
         Body(
             Div(
                 "Voice2Note",
                 style="color: navy; font-size: 2rem; font-weight: bold; text-align: center;",
             ),
-            P(
-                "Record, upload, edit and find your transcribed notes effortlessly.",
-                style="color: navy; font-size: 1rem; text-align: center;",
+            Div(
+                P(
+                    "Record, upload, find and edit your transcribed notes effortlessly.",
+                    P(
+                        "Only supports EN and ES audios.",
+                        style="margin-top: 5px;",
+                    ),
+                    style="color: navy; font-size: 1rem; text-align: center;",
+                ),
             ),
             Div(
                 Div(
@@ -810,7 +1094,13 @@ def home(request):
                 ),
                 Div(
                     P(
-                        "Is the audio okay? You can save it or record a new one that will override the current one.",
+                        "⚠️ Only ",
+                        B(".mp3"),
+                        ", ",
+                        B(".wav"),
+                        " and ",
+                        B(".webm"),
+                        " can be uploaded. You can play the audio before saving it.",
                         style="color: navy; margin-top: 20px;",
                     ),
                     Div(
@@ -1112,8 +1402,8 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
 
     # Add keyword search if provided
     if keyword:
-        query += " AND transcription->>'transcript_text' ILIKE %s"
-        query_params.append(f"%{keyword}%")
+        query += " AND (transcription->>'transcript_text' ILIKE %s OR transcription->>'note_title' ILIKE %s)"
+        query_params.extend([f"%{keyword}%", f"%{keyword}%"])
 
     query += " ORDER BY audios.created_at DESC"
 
@@ -1126,40 +1416,46 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
     search_form = Div(
         Form(
             Div(
+                # Date inputs with calendar icon
                 Div(
-                    Label("From:", cls="date-label"),
+                    I(cls="fas fa-calendar", style="color: navy;"),
                     Input(
                         type="date",
                         name="start_date",
                         cls="date-input",
                         value=start_date or "",
+                        title="From date",
                     ),
-                    cls="date-field",
-                ),
-                Div(
-                    Label("To:", cls="date-label"),
+                    "→",  # Arrow between dates
                     Input(
                         type="date",
                         name="end_date",
                         cls="date-input",
                         value=end_date or "",
+                        title="To date",
                     ),
                     cls="date-field",
                 ),
+                # Search input with search icon
                 Div(
-                    Label("Search:", cls="keyword-label"),
                     Input(
                         type="text",
                         name="keyword",
                         cls="keyword-input",
                         value=keyword or "",
-                        placeholder="Search in transcripts...",
+                        placeholder="Search in notes...",
                     ),
                     cls="keyword-field",
                 ),
-                Button("Search", type="submit", cls="search-btn"),
-                Button(
-                    "Clear", type="button", cls="clear-btn", onclick="clearSearch()"
+                Div(
+                    Button(I(cls="fas fa-search"), type="submit", cls="search-btn"),
+                    Button(
+                        I(cls="fas fa-times"),
+                        type="button",
+                        cls="clear-btn",
+                        onclick="clearSearch()",
+                    ),
+                    cls="button-field",
                 ),
                 cls="search-container",
             ),
@@ -1194,7 +1490,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
             P(note[3], cls="note-preview"),
             Div(
                 A(
-                    Button("View", cls="view-btn"),
+                    Button("\u2192", cls="view-btn"),
                     href=f"/note_{note[0]}",
                 ),
                 style="text-align: right; margin-top: 10px;",
@@ -1206,6 +1502,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
 
     return Html(
         Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title("Your Notes - Voice2Note"),
             Link(
                 rel="stylesheet",
@@ -1315,7 +1612,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                     background-color: #004080;
                 }
                 
-                /* Search form styles */
+                //* Search form styles */
                 .search-wrapper {
                     margin-bottom: 20px;
                     width: 100%;
@@ -1325,30 +1622,28 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 }
                 .search-container {
                     display: flex;
-                    gap: 15px;
+                    gap: 10px;
                     align-items: center;
-                    justify-content: flex-end;
-                    padding: 15px;
+                    padding: 12px;
                     background-color: #f3f3f3;
                     border-radius: 8px;
                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                    flex-wrap: wrap;
                 }
                 .date-field {
                     display: flex;
                     align-items: center;
                     gap: 8px;
                 }
-                .date-label {
-                    color: navy;
-                    font-weight: 500;
-                    white-space: nowrap;
-                }
                 .date-input {
-                    padding: 8px;
+                    padding: 6px;
                     border: 1px solid navy;
                     border-radius: 4px;
                     color: #333;
+                    width: 130px;
+                    font-size: 14px;
+                }
+                .date-input::-webkit-calendar-picker-indicator {
+                    cursor: pointer;
                 }
                 .keyword-field {
                     display: flex;
@@ -1356,56 +1651,61 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                     gap: 8px;
                     flex-grow: 1;
                 }
-                .keyword-label {
-                    color: navy;
-                    font-weight: 500;
-                    white-space: nowrap;
-                }
                 .keyword-input {
-                    padding: 8px;
+                    padding: 6px 12px;
                     border: 1px solid navy;
                     border-radius: 4px;
                     color: #333;
                     width: 100%;
-                    min-width: 200px;
+                    font-size: 14px;
                 }
                 .keyword-input::placeholder {
                     color: #999;
                 }
-                .search-btn {
-                    padding: 8px 16px;
-                    background-color: navy;
-                    color: white;
+                .button-field {
+                    display: flex;
+                    gap: 6px;
+                }
+                .search-btn, .clear-btn {
+                    padding: 6px 12px;
                     border: none;
                     border-radius: 4px;
                     cursor: pointer;
-                    white-space: nowrap;
+                    font-size: 16px;
+                }
+                .search-btn {
+                    background-color: navy;
+                    color: white;
                 }
                 .search-btn:hover {
                     background-color: #004080;
                 }
                 .clear-btn {
-                    padding: 8px 16px;
                     background-color: #666;
                     color: white;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    white-space: nowrap;
                 }
                 .clear-btn:hover {
                     background-color: #555;
                 }
+
                 @media (max-width: 768px) {
                     .search-container {
                         flex-direction: column;
                         align-items: stretch;
+                        gap: 12px;
                     }
-                    .date-field, .keyword-field {
+                    .date-field {
+                        flex-wrap: wrap;
+                        justify-content: space-between;
+                    }
+                    .keyword-field {
                         width: 100%;
+                    }
+                    .button-field {
+                        justify-content: stretch;
                     }
                     .search-btn, .clear-btn {
-                        width: 100%;
+                        flex: 1;
                     }
                 }
                 .delete-btn {
@@ -1533,6 +1833,7 @@ def note_detail(request: Request, audio_key: str):
 
     return Html(
         Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
             Title("Note Details - Voice2Note"),
             Link(
                 rel="stylesheet",

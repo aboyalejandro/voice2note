@@ -47,19 +47,8 @@ def lambda_handler(event, context):
             logger.info(f"Skipping: {object_key} (not in transcripts/raw/).")
             return
 
-        # Validate path structure
-        path_parts = object_key.split(
-            "/"
-        )  # ej. ['user_1','transcripts','raw','file.json']
-        if (
-            len(path_parts) != 4
-            or not path_parts[0].startswith("user_")
-            or path_parts[1] != "transcripts"
-            or path_parts[2] != "raw"
-        ):
-            logger.info(f"Skipping: {object_key} (invalid path structure).")
-            return
-
+        # Extract assets
+        path_parts = object_key.split("/")
         user_path = path_parts[0]  # user_1
         audio_key = path_parts[3].replace(".json", "")  # file (without extension)
 

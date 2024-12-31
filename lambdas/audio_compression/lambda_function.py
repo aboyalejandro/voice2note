@@ -37,18 +37,8 @@ def lambda_handler(event, context):
             logger.info(f"Skipping: {object_key} (not in audios/raw/).")
             return
 
-        # Validate path structure
+        # Extract assets
         path_parts = object_key.split("/")
-        if (
-            len(path_parts) != 4
-            or not path_parts[0].startswith("user_")
-            or path_parts[1] != "audios"
-            or path_parts[2] != "raw"
-        ):
-            raise ValueError(
-                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename"
-            )
-
         user_id = path_parts[0].replace("user_", "")
         audio_key, extension = os.path.splitext(path_parts[3])
 

@@ -945,9 +945,14 @@ def home(request):
                         const saveButton = document.getElementById('save');
 
                         if (file) {
-                            const allowedTypes = ['audio/wav', 'audio/mp3', 'audio/webm'];
-                            if (!allowedTypes.includes(file.type)) {
-                                alert('Invalid file type. Please upload a .wav, .mp3, or .webm file.');
+                            const allowedExtensions = ['wav', 'mp3', 'webm'];
+                            const fileExtension = file.name.split('.').pop().toLowerCase();
+
+                            console.log('Detected MIME type:', file.type); // Debug MIME type
+                            console.log('Detected file extension:', fileExtension); // Debug extension
+
+                            if (!allowedExtensions.includes(fileExtension)) {
+                                alert(`Invalid file type (${fileExtension}). Please upload a .wav, .mp3, or .webm file.`);
                                 event.target.value = ''; // Clear the input
                                 return;
                             }
@@ -2023,8 +2028,19 @@ async def save_audio(
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        # Get file extension from the uploaded file
-        file_extension = audio_file.filename.split(".")[-1]
+        # Determine the file extension
+        mime_type = audio_file.content_type
+        file_extension = audio_file.filename.split(".")[-1].lower()
+
+        # Map MIME types to correct file extensions
+        mime_to_extension = {
+            "audio/mpeg": "mp3",
+            "audio/wav": "wav",
+            "audio/webm": "webm",
+        }
+
+        if mime_type in mime_to_extension:
+            file_extension = mime_to_extension[mime_type]
 
         # Generate keys and paths
         timestamp = int(datetime.now().timestamp())
@@ -2035,37 +2051,27 @@ async def save_audio(
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
 
         # Insert record using user schema
-        try:
-            query = """
-                INSERT INTO audios (audio_key, user_id, s3_object_url, audio_type, created_at)
-                VALUES (%s, %s, %s, %s, %s) 
-                RETURNING audio_key
-            """
-            query_params = [
-                audio_key,
-                user_id,
-                s3_url,
-                audio_type,
-                datetime.now(),
-            ]
+        query = """
+            INSERT INTO audios (audio_key, user_id, s3_object_url, audio_type, created_at)
+            VALUES (%s, %s, %s, %s, %s) 
+            RETURNING audio_key
+        """
+        query_params = [
+            audio_key,
+            user_id,
+            s3_url,
+            audio_type,
+            datetime.now(),
+        ]
 
-            with use_user_schema(user_id):
-                cursor.execute(query, query_params)
-                conn.commit()
-                logging.info(f"Database record created for audio_key: {audio_key}")
-        except Exception as e:
-            logging.error(
-                f"Database insertion failed for audio_key {audio_key}: {str(e)}"
-            )
-            raise
+        with use_user_schema(user_id):
+            cursor.execute(query, query_params)
+            conn.commit()
+            logging.info(f"Database record created for audio_key: {audio_key}")
 
         # Upload to S3
-        try:
-            s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
-            logging.info(f"Audio file uploaded to S3: {s3_key}")
-        except Exception as e:
-            logging.error(f"S3 upload failed for key {s3_key}: {str(e)}")
-            raise
+        s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
+        logging.info(f"Audio file uploaded to S3: {s3_key}")
 
         return {"audio_key": audio_key}
 

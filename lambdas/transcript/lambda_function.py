@@ -22,17 +22,10 @@ def lambda_handler(event, context):
 
         logger.info(f"New file detected: {object_key} in bucket {bucket_name}")
 
-        # Validate path structure
-        path_parts = object_key.split("/")
-        if (
-            len(path_parts) != 4
-            or not path_parts[0].startswith("user_")
-            or path_parts[1] != "audios"
-            or path_parts[2] != "raw"
-        ):
-            raise ValueError(
-                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename"
-            )
+        # Validate path
+        if "audios/raw/" not in object_key:
+            logger.info(f"Skipping: {object_key} (not in audios/raw/).")
+            return
 
         # Validate file extension
         is_valid, media_format = validate_file_extension(object_key)
@@ -41,7 +34,8 @@ def lambda_handler(event, context):
                 f"Invalid file extension for {object_key}. Only .mp3, .wav, and .webm are supported."
             )
 
-        # Extract user_id for logging
+        # Extract assets
+        path_parts = object_key.split("/")
         user_id = path_parts[0].replace("user_", "")
         audio_key = path_parts[3].replace(f".{media_format}", "")
         logger.info(f"Processing audio {audio_key} for user {user_id}")

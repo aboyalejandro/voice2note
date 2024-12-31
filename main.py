@@ -1599,7 +1599,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
             COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary,
-            COALESCE(concat(split_part(metadata->>'duration',':',2), 'm ', split_part(split_part(metadata->>'duration',':',3),'.',1) , 's') , '00:00:00') as duration
+            COALESCE(concat(split_part(metadata->>'duration',':',2), 'm ', split_part(split_part(metadata->>'duration',':',3),'.',1) , 's') , '...') as duration
         FROM audios
         LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
         WHERE audios.deleted_at IS NULL

@@ -1,13 +1,22 @@
 import boto3
 import json
+import os
 from aws_lambda_powertools import Logger
-from utils import convert_to_amr
+from utils import convert_to_amr, update_metadata
 
 # Setup logging
 logger = Logger(service="v2n_audio_compression")
 
 # AWS clients
 s3_client = boto3.client("s3")
+aws_region = "eu-east-1"
+
+# PostgreSQL connection parameters from environment variables
+DB_HOST = os.getenv("DB_HOST")
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_PORT = os.getenv("DB_PORT")
 
 # Path to ffmpeg binary from the layer
 FFMPEG_PATH = "/opt/bin/ffmpeg"
@@ -55,6 +64,18 @@ def lambda_handler(event, context):
         compressed_key = f"user_{user_id}/audios/compressed/{audio_key}.amr"
         s3_client.upload_file(amr_file_path, bucket_name, compressed_key)
         logger.info(f"Converted AMR file saved to S3 at {compressed_key}")
+        compressed_audio_url = f"s3:{bucket_name}/{compressed_key}"
+        # Update Metada with compressed audio URL Path
+        update_metadata(
+            user_id,
+            audio_key,
+            compressed_audio_url,
+            DB_USER,
+            DB_PASSWORD,
+            DB_NAME,
+            DB_HOST,
+            DB_PORT,
+        )
 
         return {"statusCode": 200, "body": f"Audio {object_key} converted to AMR"}
 

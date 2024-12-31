@@ -1,4 +1,6 @@
 import boto3
+from datetime import datetime
+import json
 from aws_lambda_powertools import Logger
 
 # Setup logging
@@ -9,9 +11,11 @@ logger = Logger(service="v2n_transcript")
 def transcribe_audio(bucket_name: str, object_key: str, client):
     try:
         # Parse path components from the new structure
-        path_parts = object_key.split("/")  # ['user_1', 'audios', '1_timestamp.wav']
+        path_parts = object_key.split(
+            "/"
+        )  # ['user_1', 'audios', 'raw', '1_timestamp.wav']
         user_path = path_parts[0]  # user_1
-        audio_key = path_parts[2].replace(".wav", "")  # 1_timestamp
+        audio_key = path_parts[3].replace(".wav", "")  # 1_timestamp
 
         job_name = f"v2n_transcribe_job_{audio_key}"
         file_uri = f"s3://{bucket_name}/{object_key}"
@@ -44,11 +48,17 @@ def transcribe_audio(bucket_name: str, object_key: str, client):
 
 
 # Publish to SNS
-def publish_to_sns(bucket_name, object_key, sns_topic_arn):
-    message = {"bucket_name": bucket_name, "object_key": object_key}
-    sns_client.publish(
-        TopicArn=SNS_TOPIC_ARN,
-        Message=json.dumps(message),
-        Subject=f"New audio available in {object_key}",
-    )
-    logger.info(f"Published message to SNS: {message}")
+def publish_to_sns(bucket_name, object_key, sns_client, sns_topic_arn):
+    try:
+        message = {"bucket_name": bucket_name, "object_key": object_key}
+        sns_client.publish(
+            TopicArn=sns_topic_arn,
+            Message=json.dumps(
+                {"bucket_name": f"{bucket_name}", "object_key": f"{object_key}"}
+            ),
+            Subject=f"New audio available in {object_key}",
+        )
+        logger.info("SNS message published successfully.")
+    except Exception as e:
+        logger.error(f"Error publishing SNS message: {e}")
+        raise

@@ -57,7 +57,9 @@ def export_summary(
         s3_client.upload_file(json_file_path, bucket_name, output_path)
         logger.info(f"JSON file uploaded to {bucket_name}/{output_path}")
 
-        return [output_path, json_object]
+        full_output_path = f"s3://{bucket_name}/{output_path}"
+
+        return [full_output_path, json_object]
     except Exception as e:
         logger.error(f"Error exporting summary: {e}")
         raise
@@ -89,7 +91,7 @@ def save_to_postgresql(
                 """
                 values = (
                     audio_key,
-                    transcript_results[0],
+                    transcript_results[0],  # Pass the string directly
                     json.dumps(transcript_results[1]),
                 )
 

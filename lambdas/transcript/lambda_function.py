@@ -1,3 +1,4 @@
+import os
 import boto3
 from utils import transcribe_audio, publish_to_sns
 from aws_lambda_powertools import Logger
@@ -24,12 +25,13 @@ def lambda_handler(event, context):
         # Validate path structure
         path_parts = object_key.split("/")
         if (
-            len(path_parts) != 3
+            len(path_parts) != 4
             or not path_parts[0].startswith("user_")
             or path_parts[1] != "audios"
+            or path_parts[2] != "raw"
         ):
             raise ValueError(
-                f"Invalid path structure: {object_key}. Expected: user_X/audios/filename.wav"
+                "Invalid path structure. Expected: user_{user_id}/audios/raw/filename.wav"
             )
 
         # Extract user_id for logging
@@ -47,7 +49,7 @@ def lambda_handler(event, context):
         )
 
         # Publish Payload
-        publish_to_sns(bucket_name, object_key, sns_topic_arn)
+        publish_to_sns(bucket_name, object_key, sns_client, sns_topic_arn)
 
         return {"statusCode": 200, "body": f"Processing started for {object_key}"}
 

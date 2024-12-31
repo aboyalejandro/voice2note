@@ -9,13 +9,13 @@ import subprocess
 logger = Logger(service="v2n_audio_metadata_processing")
 
 
-def get_audio_metadata(input_file, ffmepg_path):
+def get_audio_metadata(input_file, ffmpeg_path):
     """
     Extract metadata from an audio file using ffmpeg.
     """
     try:
         result = subprocess.run(
-            [ffmepg_path, "-i", input_file, "-hide_banner"],
+            [ffmpeg_path, "-i", input_file, "-hide_banner"],
             stderr=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
@@ -29,7 +29,7 @@ def get_audio_metadata(input_file, ffmepg_path):
                 metadata["duration"] = parts[0].split("Duration: ")[1].strip()
                 metadata["bit_rate"] = parts[-1].split("bitrate: ")[1].strip()
             if "Stream" in line and "Audio" in line:
-                metadata["audio_details"] = line.strip()
+                metadata["audio_details"] = str(line.strip())  # Ensure it is a string
 
         metadata["size"] = os.path.getsize(input_file)
         return metadata
@@ -42,6 +42,9 @@ def save_metadata_to_postgresql(
     user_id, audio_key, metadata, user, password, db, host, port
 ):
     try:
+        # Ensure metadata is JSON-serializable
+        metadata_json = json.dumps(metadata)
+
         with psycopg2.connect(
             host=host, database=db, user=user, password=password, port=port
         ) as conn:
@@ -51,7 +54,7 @@ def save_metadata_to_postgresql(
                 SET metadata = %s
                 WHERE audio_key = %s;
                 """
-                cur.execute(query, (json.dumps(metadata), audio_key))
+                cur.execute(query, (metadata_json, audio_key))
                 conn.commit()
                 logger.info(f"Metadata updated in PostgreSQL for user_{user_id}.audios")
     except Exception as e:

@@ -2449,8 +2449,8 @@ def note_detail(request: Request, audio_key: str):
                 async function toggleAudio(audioKey) {
                     const playBtn = document.getElementById('play-btn');
                     const durationDisplay = document.getElementById('duration-display');
-                    const audioPlayer = document.getElementById('audio-player');
-                    
+                    let audioPlayer = document.getElementById('audio-player');
+
                     if (!isPlaying) {
                         try {
                             playBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
@@ -2462,22 +2462,24 @@ def note_detail(request: Request, audio_key: str):
                             const blob = await response.blob();
                             const audioUrl = URL.createObjectURL(blob);
                             
-                            // Create a new audio element each time
-                            const newAudioPlayer = document.createElement('audio');
-                            newAudioPlayer.id = 'audio-player';
-                            newAudioPlayer.className = 'audio-player';
-                            
-                            // Replace old audio player
-                            const oldAudioPlayer = audioPlayer;
-                            oldAudioPlayer.parentNode.replaceChild(newAudioPlayer, oldAudioPlayer);
+                            // Create a new audio element if it doesn't exist
+                            if (!audioPlayer) {
+                                audioPlayer = document.createElement('audio');
+                                audioPlayer.id = 'audio-player';
+                                audioPlayer.className = 'audio-player';
+                                // Insert after the play button
+                                playBtn.parentNode.insertBefore(audioPlayer, playBtn.nextSibling);
+                            }
                             
                             // Set source and try to play
-                            newAudioPlayer.src = audioUrl;
-                            newAudioPlayer.style.display = 'block';
-                            durationDisplay.style.display = 'none';
+                            audioPlayer.src = audioUrl;
+                            audioPlayer.style.display = 'block';
+                            if (durationDisplay) {
+                                durationDisplay.style.display = 'none';
+                            }
                             
                             // Add error handler
-                            newAudioPlayer.onerror = (e) => {
+                            audioPlayer.onerror = (e) => {
                                 console.error('Audio playback error:', e);
                                 alert('This audio format might not be supported by your browser.');
                                 playBtn.innerHTML = '<i class="fas fa-play"></i>';
@@ -2485,7 +2487,7 @@ def note_detail(request: Request, audio_key: str):
                             };
                             
                             // Try playing
-                            const playPromise = newAudioPlayer.play();
+                            const playPromise = audioPlayer.play();
                             if (playPromise !== undefined) {
                                 playPromise
                                     .then(() => {
@@ -2500,10 +2502,12 @@ def note_detail(request: Request, audio_key: str):
                             }
                             
                             // Handle audio end
-                            newAudioPlayer.onended = () => {
+                            audioPlayer.onended = () => {
                                 playBtn.innerHTML = '<i class="fas fa-play"></i>';
-                                newAudioPlayer.style.display = 'none';
-                                durationDisplay.style.display = 'block';
+                                audioPlayer.style.display = 'none';
+                                if (durationDisplay) {
+                                    durationDisplay.style.display = 'block';
+                                }
                                 isPlaying = false;
                             };
                         } catch (error) {
@@ -2514,11 +2518,15 @@ def note_detail(request: Request, audio_key: str):
                         }
                     } else {
                         // Pause audio
-                        audioPlayer.pause();
-                        playBtn.innerHTML = '<i class="fas fa-play"></i>';
-                        audioPlayer.style.display = 'none';
-                        durationDisplay.style.display = 'block';
-                        isPlaying = false;
+                        if (audioPlayer) {
+                            audioPlayer.pause();
+                            playBtn.innerHTML = '<i class="fas fa-play"></i>';
+                            audioPlayer.style.display = 'none';
+                            if (durationDisplay) {
+                                durationDisplay.style.display = 'block';
+                            }
+                            isPlaying = false;
+                        }
                     }
                 }
             """

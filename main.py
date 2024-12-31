@@ -58,6 +58,46 @@ def get_common_styles():
         align-items: center;
         min-height: 100vh;
     }
+
+    /* Update text elements to use Arial */
+    .auth-title, .title {
+        font-weight: bold;
+    }
+
+    .note-title {
+        font-weight: bold;
+    }
+
+    .form-label {
+        font-weight: 500;
+    }
+
+    .auth-btn, .search-btn, .clear-btn, .view-btn {
+        font-family: Arial, sans-serif;
+        font-weight: 500;
+    }
+
+    .note-date {
+        font-weight: 500;
+    }
+
+    .note-preview {
+        font-weight: normal;
+    }
+
+    input, textarea, button {
+        font-family: Arial, sans-serif;
+    }
+
+    .note-duration {
+        color: #666;
+        font-size: 0.9em;
+        margin: 0;
+        font-weight: bold;
+        display: inline-flex;
+        align-items: center;
+    }
+
     .auth-container {
         width: 90%;
         max-width: 400px;
@@ -307,7 +347,7 @@ def get_common_styles():
             padding: 6px;
         }
 
-        .note-title {
+        .note-title .note-duration {
             font-size: 14px;
         }
 
@@ -365,6 +405,183 @@ def get_common_styles():
         .search-container {
             background-color: #3d3d3d;
         }
+    }
+
+    /* Search container styles */
+    .search-container {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 12px;
+        background-color: #f3f3f3;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .date-field {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;  /* Allow date field to grow */
+    }
+
+    .keyword-field {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 2;  /* Give keyword field more growing space */
+    }
+
+    .keyword-input {
+        padding: 6px 12px;
+        border: 1px solid navy;
+        border-radius: 4px;
+        color: #333;
+        width: 100%;
+        font-size: 14px;
+    }
+
+    .keyword-input::placeholder {
+        color: #999;
+    }
+
+    .date-input {
+        padding: 6px;
+        border: 1px solid navy;
+        border-radius: 4px;
+        color: #333;
+        width: 130px;
+        font-size: 14px;
+        flex: 1;  /* Allow inputs to grow within date-field */
+        min-width: 110px;  /* Minimum width to prevent too much shrinking */
+    }
+
+    .date-input::-webkit-calendar-picker-indicator {
+        cursor: pointer;
+    }
+
+    /* Note actions alignment */
+    .note-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .search-container {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .date-field, .keyword-field {
+            width: 100%;
+        }
+
+        .date-field {
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .note-header {
+            flex-direction: row;  /* Keep horizontal layout */
+            justify-content: space-between;
+            align-items: center;  /* Center align items vertically */
+        }
+
+        .note-actions {
+            justify-content: flex-end;
+            align-items: center;
+            width: auto;  /* Remove full width */
+        }
+
+        .note-info {
+            flex: 1;  /* Allow info to take remaining space */
+        }
+    }
+
+    @media (max-width: 400px) {
+        .date-input {
+            min-width: 90px;  /* Even smaller minimum width for very small screens */
+        }
+
+        .date-field span {
+            min-width: 35px;
+        }
+    }
+
+    /* Search container and button styles */
+    .search-container {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 12px;
+        background-color: #f3f3f3;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .button-field {
+        display: flex;
+        gap: 6px;
+    }
+
+    .search-btn, .clear-btn {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    .search-btn {
+        background-color: navy;
+        color: white;
+    }
+
+    .clear-btn {
+        background-color: #666;
+        color: white;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 755px) {
+        .search-container {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .date-field, .keyword-field {
+            width: 100%;
+        }
+        
+        .button-field {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+        
+        .search-btn, .clear-btn {
+            flex: 1;  /* Make buttons expand equally */
+            padding: 10px;  /* Slightly larger padding for better touch targets */
+        }
+    }
+
+    /* Add back the logout button styles */
+    .logout-btn {
+        padding: 8px 16px;
+        background-color: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.2s;
+    }
+
+    .logout-btn:hover {
+        background-color: #c82333;
     }
     """
 
@@ -1382,7 +1599,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
             TO_CHAR(audios.created_at, 'MM/DD') as note_date,
             COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
             COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary,
-            COALESCE(metadata->>'duration', '00:00:00') as duration
+            COALESCE(concat(split_part(metadata->>'duration',':',2), 'm ', split_part(split_part(metadata->>'duration',':',3),'.',1) , 's') , '00:00:00') as duration
         FROM audios
         LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
         WHERE audios.deleted_at IS NULL
@@ -1416,9 +1633,9 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
     search_form = Div(
         Form(
             Div(
-                # Date inputs with calendar icon
                 Div(
                     I(cls="fas fa-calendar", style="color: navy;"),
+                    "From: ",
                     Input(
                         type="date",
                         name="start_date",
@@ -1426,7 +1643,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                         value=start_date or "",
                         title="From date",
                     ),
-                    "→",  # Arrow between dates
+                    "To: ",
                     Input(
                         type="date",
                         name="end_date",
@@ -1436,7 +1653,6 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                     ),
                     cls="date-field",
                 ),
-                # Search input with search icon
                 Div(
                     Input(
                         type="text",
@@ -1465,6 +1681,12 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
         cls="search-wrapper",
     )
 
+    def truncate_summary(text, max_length=200):
+        """Truncate text to specified length and add ellipsis if needed"""
+        if len(text) <= max_length:
+            return text
+        return text[: max_length - 3] + "..."
+
     note_cards = [
         Div(
             Div(
@@ -1478,16 +1700,11 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                         note[4] if note[4] else "0.00s",
                         cls="note-duration",
                     ),
-                    Button(
-                        I(cls="fas fa-trash"),
-                        cls="delete-btn",
-                        onclick=f"deleteNote('{note[0]}')",
-                    ),
                     cls="note-actions",
                 ),
                 cls="note-header",
             ),
-            P(note[3], cls="note-preview"),
+            P(truncate_summary(note[3]), cls="note-preview"),
             Div(
                 A(
                     Button("\u2192", cls="view-btn"),
@@ -1532,8 +1749,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 }
                 .back-button {
                     display: inline-block;
-                    margin-top: 40px;
-                    margin-bottom: 20px;
+                    margin: 40px 0 20px 20px; /* Added left margin */
                     font-size: 16px;
                     color: #ffffff;
                     background-color: navy;
@@ -1549,6 +1765,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                     font-weight: bold;
                     color: navy;
                     margin-bottom: 15px;
+                    margin-left: 10px; 
                 }
                 .note {
                     display: flex;
@@ -1562,32 +1779,33 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 .note-header {
                     display: flex;
                     justify-content: space-between;
-                    align-items: flex-start;
+                    align-items: center;  /* Center align all items vertically */
                     margin-bottom: 5px;
                     color: #333;
                 }
-                .note-actions {
+                .note-info {
                     display: flex;
-                    align-items: flex-start;
+                    align-items: center;  /* Center align date and title vertically */
                     gap: 10px;
+                    flex: 1;
+                }
+                .note-title {
+                    color: navy;
+                    font-weight: bold;
+                    font-size: clamp(0.9em, 2vw, 1.2em);
+                    margin: 0;
+                    word-break: break-word;
+                    line-height: 1.3;
+                    display: flex;
+                    align-items: center;  /* Center text vertically */
                 }
                 .note-duration {
                     color: #666;
                     font-size: 0.9em;
                     margin: 0;
-                    padding-top: 3px;
                     font-weight: bold;
-                }
-                .note-info {
-                    display: flex;
+                    display: inline-flex;
                     align-items: center;
-                    gap: 10px;
-                }
-                .note-title {
-                    color: navy;
-                    font-weight: bold;
-                    font-size: 1.2em;
-                    margin: 0;
                 }
                 .note-date {
                     color: #666;
@@ -1598,6 +1816,11 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 .note-preview {
                     color: #666;
                     font-size: 14px;
+                    display: -webkit-box;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    -webkit-line-clamp: 3; /* Show 3 lines max */
                 }
                 .view-btn {
                     font-size: 14px;
@@ -1620,6 +1843,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 .search-form {
                     width: 100%;
                 }
+                /* Search container responsive adjustments */
                 .search-container {
                     display: flex;
                     gap: 10px;
@@ -1629,28 +1853,21 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                     border-radius: 8px;
                     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 }
+
                 .date-field {
                     display: flex;
                     align-items: center;
                     gap: 8px;
+                    flex: 1;  /* Allow date field to grow */
                 }
-                .date-input {
-                    padding: 6px;
-                    border: 1px solid navy;
-                    border-radius: 4px;
-                    color: #333;
-                    width: 130px;
-                    font-size: 14px;
-                }
-                .date-input::-webkit-calendar-picker-indicator {
-                    cursor: pointer;
-                }
+
                 .keyword-field {
                     display: flex;
                     align-items: center;
                     gap: 8px;
-                    flex-grow: 1;
+                    flex: 2;  /* Give keyword field more growing space */
                 }
+
                 .keyword-input {
                     padding: 6px 12px;
                     border: 1px solid navy;
@@ -1659,9 +1876,26 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                     width: 100%;
                     font-size: 14px;
                 }
+
                 .keyword-input::placeholder {
                     color: #999;
                 }
+
+                .date-input {
+                    padding: 6px;
+                    border: 1px solid navy;
+                    border-radius: 4px;
+                    color: #333;
+                    width: 130px;
+                    font-size: 14px;
+                    flex: 1;  /* Allow inputs to grow within date-field */
+                    min-width: 110px;  /* Minimum width to prevent too much shrinking */
+                }
+
+                .date-input::-webkit-calendar-picker-indicator {
+                    cursor: pointer;
+                }
+
                 .button-field {
                     display: flex;
                     gap: 6px;
@@ -1687,53 +1921,106 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 .clear-btn:hover {
                     background-color: #555;
                 }
+                .logout-btn {
+                        padding: 8px 16px;
+                        background-color: #dc3545;
+                        color: white;
+                        border: none;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        transition: background-color 0.2s;
+                    }
+                .logout-btn:hover {
+                    background-color: #c82333;
+                }
 
                 @media (max-width: 768px) {
                     .search-container {
                         flex-direction: column;
                         align-items: stretch;
-                        gap: 12px;
                     }
-                    .date-field {
-                        flex-wrap: wrap;
-                        justify-content: space-between;
-                    }
-                    .keyword-field {
+                    
+                    .date-field, .keyword-field {
                         width: 100%;
                     }
-                    .button-field {
-                        justify-content: stretch;
+                    
+                    .date-field {
+                        justify-content: space-between;
+                        flex-wrap: wrap;
+                        gap: 10px;
                     }
-                    .search-btn, .clear-btn {
-                        flex: 1;
+                    
+                    .note-preview {
+                        -webkit-line-clamp: 2; /* Show 2 lines on mobile */
                     }
                 }
-                .delete-btn {
-                    background: none;
-                    border: none;
-                    color: #dc3545;
-                    cursor: pointer;
-                    padding: 5px;
-                    font-size: 1.1em;
-                    opacity: 0.7;
-                    transition: opacity 0.2s;
-                    margin-top: -5px;
+
+                @media (max-width: 400px) {
+                    .date-input {
+                        min-width: 90px;  /* Even smaller minimum width for very small screens */
+                    }
+                    
+                    .date-field span {
+                        min-width: 35px;
+                    }
                 }
-                .delete-btn:hover {
-                    opacity: 1;
+
+                /* Search container and button styles */
+                .search-container {
+                    display: flex;
+                    gap: 10px;
+                    align-items: center;
+                    padding: 12px;
+                    background-color: #f3f3f3;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 }
-                .logout-btn {
-                    padding: 8px 16px;
-                    background-color: #dc3545;
-                    color: white;
+
+                .button-field {
+                    display: flex;
+                    gap: 6px;
+                }
+
+                .search-btn, .clear-btn {
+                    padding: 6px 12px;
                     border: none;
                     border-radius: 4px;
                     cursor: pointer;
-                    font-size: 14px;
-                    transition: background-color 0.2s;
+                    font-size: 16px;
                 }
-                .logout-btn:hover {
-                    background-color: #c82333;
+
+                .search-btn {
+                    background-color: navy;
+                    color: white;
+                }
+
+                .clear-btn {
+                    background-color: #666;
+                    color: white;
+                }
+
+                /* Responsive adjustments */
+                @media (max-width: 755px) {
+                    .search-container {
+                        flex-direction: column;
+                        align-items: stretch;
+                    }
+                    
+                    .date-field, .keyword-field {
+                        width: 100%;
+                    }
+                    
+                    .button-field {
+                        display: flex;
+                        gap: 10px;
+                        width: 100%;
+                    }
+                    
+                    .search-btn, .clear-btn {
+                        flex: 1;  /* Make buttons expand equally */
+                        padding: 10px;  /* Slightly larger padding for better touch targets */
+                    }
                 }
                 """
             ),
@@ -1817,7 +2104,7 @@ def note_detail(request: Request, audio_key: str):
                 TO_CHAR(audios.created_at, 'MM/DD') as note_date,
                 COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
                 COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription,
-                COALESCE(metadata->>'duration', '00:00:00') as duration
+                COALESCE(concat(split_part(metadata->>'duration',':',2), 'm ', split_part(split_part(metadata->>'duration',':',3),'.',1) , 's') , '00:00:00') as duration
             FROM audios
             LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
             WHERE audios.audio_key = %s
@@ -1925,13 +2212,6 @@ def note_detail(request: Request, audio_key: str):
                     align-items: flex-start;
                     gap: 10px;
                 }
-                .note-duration {
-                    color: #666;
-                    font-size: 0.9em;
-                    margin: 0;
-                    padding-top: 3px;
-                    font-weight: bold;
-                }
                 .delete-btn {
                     background: none;
                     border: none;
@@ -1941,7 +2221,9 @@ def note_detail(request: Request, audio_key: str):
                     font-size: 1.1em;
                     opacity: 0.7;
                     transition: opacity 0.2s;
-                    margin-top: -5px;
+                    margin: 0;
+                    display: inline-flex;
+                    align-items: center;
                 }
                 .delete-btn:hover {
                     opacity: 1;
@@ -2056,6 +2338,19 @@ def note_detail(request: Request, audio_key: str):
                     width: 100%;
                     max-width: 300px;
                     margin-right: 10px;
+                }
+                
+                .note-actions {
+                    display: flex;
+                    gap: 15px;
+                    align-items: center;
+                }
+
+                .play-btn,
+                .edit-btn,
+                .delete-btn {
+                    font-size: 1.2em;
+                    padding: 8px;
                 }
             """
             ),
@@ -2184,7 +2479,7 @@ def note_detail(request: Request, audio_key: str):
                             // Add error handler
                             newAudioPlayer.onerror = (e) => {
                                 console.error('Audio playback error:', e);
-                                alert('This audio format might not be supported by your browser. Try downloading the file instead.');
+                                alert('This audio format might not be supported by your browser.');
                                 playBtn.innerHTML = '<i class="fas fa-play"></i>';
                                 isPlaying = false;
                             };
@@ -2213,7 +2508,7 @@ def note_detail(request: Request, audio_key: str):
                             };
                         } catch (error) {
                             console.error('Error playing audio:', error);
-                            alert('Failed to play audio. You may need to download it instead.');
+                            alert('Failed to play audio.');
                             playBtn.innerHTML = '<i class="fas fa-play"></i>';
                             isPlaying = false;
                         }
@@ -2231,6 +2526,18 @@ def note_detail(request: Request, audio_key: str):
         ),
         Body(
             Div(
+                Form(
+                    Button(
+                        "Logout",
+                        type="submit",
+                        cls="logout-btn",
+                    ),
+                    method="POST",
+                    action="/api/logout",
+                ),
+                style="position: absolute; top: 20px; right: 20px;",
+            ),
+            Div(
                 A("\u2190", href="/notes", cls="back-button"),
                 # Note display container
                 Div(
@@ -2241,16 +2548,6 @@ def note_detail(request: Request, audio_key: str):
                             cls="note-info",
                         ),
                         Div(
-                            P(
-                                note[4] if note[4] else "0.00s",
-                                cls="note-duration",
-                                id="duration-display",
-                            ),
-                            Audio(
-                                id="audio-player",
-                                cls="audio-player",
-                                style="display: none;",
-                            ),
                             Button(
                                 I(cls="fas fa-play"),
                                 cls="play-btn",
@@ -2269,7 +2566,7 @@ def note_detail(request: Request, audio_key: str):
                             ),
                             cls="note-actions",
                         ),
-                        cls="note-header",
+                        cls="note-header note-detail",
                     ),
                     P(note[3], cls="note-transcription"),
                     cls="note-container",

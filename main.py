@@ -952,32 +952,65 @@ def home(request):
                         }
                     });
 
+                    document.getElementById('stop').addEventListener('click', () => {
+                        if (mediaRecorder && mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                            document.getElementById('start').disabled = false;
+                            document.getElementById('stop').disabled = true;
+                            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                        }
+                    });
+
                     document.getElementById('start').addEventListener('click', () => {
                         navigator.mediaDevices.getUserMedia({ audio: true })
                             .then(stream => {
-                                mediaRecorder = new MediaRecorder(stream);
+                                const options = {
+                                    mimeType: 'audio/webm',
+                                    audioBitsPerSecond: 128000
+                                };
+                                
+                                if (MediaRecorder.isTypeSupported('audio/webm')) {
+                                    mediaRecorder = new MediaRecorder(stream, options);
+                                } else {
+                                    mediaRecorder = new MediaRecorder(stream);
+                                }
+                                
                                 recordingDuration = 0;
+                                audioChunks = [];
                                 
                                 mediaRecorder.ondataavailable = event => {
                                     audioChunks.push(event.data);
                                 };
 
-                                mediaRecorder.onstop = () => {
-                                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                                    audioChunks = [];
-                                    const audioUrl = URL.createObjectURL(audioBlob);
-                                    const audioPlayback = document.getElementById('audioPlayback');
-                                    audioPlayback.src = audioUrl;
-                                    
-                                    clearInterval(recordInterval);
-                                    document.getElementById('recordTimer').style.display = 'none';
-                                    
-                                    window.audioBlob = audioBlob;
-                                    window.audioType = 'recorded';
-                                    document.getElementById('save').disabled = false;
+                                mediaRecorder.onstop = async () => {
+                                    try {
+                                        // Create WebM blob
+                                        const webmBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                                        
+                                        // Convert WebM to WAV 
+                                        const audioContext = new AudioContext();
+                                        const audioBuffer = await webmBlob.arrayBuffer()
+                                            .then(buffer => audioContext.decodeAudioData(buffer));
+                                        const wavData = audioBufferToWav(audioBuffer);
+                                        const wavBlob = new Blob([wavData], { type: 'audio/wav' });
+                                        
+                                        const audioUrl = URL.createObjectURL(wavBlob);
+                                        const audioPlayback = document.getElementById('audioPlayback');
+                                        audioPlayback.src = audioUrl;
+                                        
+                                        clearInterval(recordInterval);
+                                        document.getElementById('recordTimer').style.display = 'none';
+                                        
+                                        window.audioBlob = wavBlob;
+                                        window.audioType = 'recorded';
+                                        document.getElementById('save').disabled = false;
+                                    } catch (error) {
+                                        console.error('Error processing audio:', error);
+                                        alert('Error processing audio. Please try again.');
+                                    }
                                 };
 
-                                mediaRecorder.start();
+                                mediaRecorder.start(1000);
                                 document.getElementById('start').disabled = true;
                                 document.getElementById('stop').disabled = false;
 
@@ -990,17 +1023,80 @@ def home(request):
                                     const displaySeconds = recordingDuration % 60;
                                     timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
                                 }, 1000);
+                            })
+                            .catch(error => {
+                                console.error('Error accessing microphone:', error);
+                                alert('Error accessing microphone. Please ensure you have given permission.');
                             });
                     });
 
-                    document.getElementById('stop').addEventListener('click', () => {
-                        if (mediaRecorder && mediaRecorder.state === 'recording') {
-                            mediaRecorder.stop();
-                            document.getElementById('start').disabled = false;
-                            document.getElementById('stop').disabled = true;
+                    function audioBufferToWav(audioBuffer) {
+                        const numChannels = audioBuffer.numberOfChannels;
+                        const length = audioBuffer.length * numChannels * 2;
+                        const arrayBuffer = new ArrayBuffer(44 + length);
+                        const view = new DataView(arrayBuffer);
+                        const sampleRate = audioBuffer.sampleRate;
+                        const blockAlign = numChannels * 2;
+                        const byteRate = sampleRate * blockAlign;
+
+                        // Write WAV header
+                        writeString(view, 0, 'RIFF');
+                        view.setUint32(4, 36 + length, true);
+                        writeString(view, 8, 'WAVE');
+                        writeString(view, 12, 'fmt ');
+                        view.setUint32(16, 16, true);
+                        view.setUint16(20, 1, true);
+                        view.setUint16(22, numChannels, true);
+                        view.setUint32(24, sampleRate, true);
+                        view.setUint32(28, byteRate, true);
+                        view.setUint16(32, blockAlign, true);
+                        view.setUint16(34, 16, true);
+                        writeString(view, 36, 'data');
+                        view.setUint32(40, length, true);
+
+                        // Write interleaved audio data
+                        let offset = 44;
+                        const float32Arrays = Array.from({ length: numChannels }, (_, i) => 
+                            audioBuffer.getChannelData(i));
+                        
+                        for (let i = 0; i < audioBuffer.length; i++) {
+                            for (let channel = 0; channel < numChannels; channel++) {
+                                const sample = Math.max(-1, Math.min(1, float32Arrays[channel][i]));
+                                view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+                                offset += 2;
+                            }
+                        }
+
+                        return arrayBuffer;
+                    }
+
+                    // Helper function to write strings to DataView
+                    function writeString(view, offset, string) {
+                        for (let i = 0; i < string.length; i++) {
+                            view.setUint8(offset + i, string.charCodeAt(i));
+                        }
+                    }
+
+                    // Updated upload input handler with validation
+                    document.getElementById('uploadInput').addEventListener('change', (event) => {
+                        const file = event.target.files[0];
+                        if (file) {
+                            if (file.type !== 'audio/wav') {
+                                alert('Please select a WAV file.');
+                                event.target.value = ''; // Clear the input
+                                return;
+                            }
+                            
+                            const audioUrl = URL.createObjectURL(file);
+                            const audioPlayback = document.getElementById('audioPlayback');
+                            audioPlayback.src = audioUrl;
+                            window.audioBlob = file;
+                            window.audioType = 'uploaded';
+                            document.getElementById('save').disabled = false;
                         }
                     });
 
+                    // Updated save handler with error handling
                     document.getElementById('save').addEventListener('click', () => {
                         const audioBlob = window.audioBlob;
                         const audioType = window.audioType;
@@ -1016,17 +1112,33 @@ def home(request):
                         formData.append('audio_file', audioBlob, filename);
                         formData.append('audio_type', audioType);
 
+                        // Show loading state
+                        const saveButton = document.getElementById('save');
+                        const originalText = saveButton.textContent;
+                        saveButton.textContent = 'Saving...';
+                        saveButton.disabled = true;
+
                         fetch('/save-audio', {
                             method: 'POST',
                             body: formData,
-                        }).then(response => {
-                            if (response.ok) {
-                                response.json().then(data => {
-                                    alert('Audio saved successfully! It will show up in the Notes page shortly.');
-                                });
-                            } else {
-                                alert('Failed to save audio.');
-                            }
+                        })
+                        .then(response => {
+                            if (!response.ok) throw new Error('Failed to save audio');
+                            return response.json();
+                        })
+                        .then(data => {
+                            alert('Audio saved successfully! It will show up in the Notes page shortly.');
+                            window.audioBlob = null;
+                            document.getElementById('audioPlayback').src = '';
+                            saveButton.disabled = true;
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            alert('Failed to save audio. Please try again.');
+                        })
+                        .finally(() => {
+                            saveButton.textContent = originalText;
+                            saveButton.disabled = false;
                         });
                     });
                 """
@@ -1954,7 +2066,7 @@ async def save_audio(
         timestamp = int(datetime.now().timestamp())
         audio_key = f"{user_id}_{timestamp}"
         s3_key = f"user_{user_id}/audios/raw/{audio_key}.wav"
-        s3_url = f"s3://{AWS_S3_BUCKET}//{s3_key}"
+        s3_url = f"s3://{AWS_S3_BUCKET}/{s3_key}"
 
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
 

@@ -1,6 +1,6 @@
 # Voice2Note 🎙️📝
 
-Voice2Note is an AI-powered web application that transforms your voice recordings into organized, searchable notes. Built for the AI Apps Hackathon, it offers a seamless experience for recording, transcribing, and managing your audio notes.
+Voice2Note is an AI-powered web application that transforms your voice recordings into organized, searchable notes. Whether you're a student recording lectures, a professional capturing meeting notes, or anyone who prefers speaking over typing, Voice2Note helps you save time by keeping your thoughts organized.
 
 ## Features ✨
 
@@ -36,12 +36,3 @@ Voice2Note uses a combination of AWS services and OpenAI's GPT to process your a
 - **Database**: PostgreSQL
 - **Cloud Services**: AWS (S3, Lambda, Transcribe)
 - **AI/ML**: OpenAI GPT
-
-## Why Voice2Note? 🎯
-
-Voice2Note was developed to solve the common problem of managing voice notes effectively. Whether you're a student recording lectures, a professional capturing meeting notes, or anyone who prefers speaking over typing, Voice2Note helps you:
-
-- Save time by automating transcription
-- Find specific information quickly
-- Keep your thoughts organized
-- Access your notes from any device

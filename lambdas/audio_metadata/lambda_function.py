@@ -63,8 +63,11 @@ def lambda_handler(event, context):
         local_file_path = f"/tmp/{audio_key}.{media_format}"
         s3_client.download_file(bucket_name, object_key, local_file_path)
 
-        # Get original audio metadata
-        original_metadata = get_audio_metadata(local_file_path, FFMPEG_PATH)
+        # Re-encode if necessary
+        reencoded_path = f"/tmp/reencoded_{os.path.basename(object_key)}"
+        if media_format == "webm":
+            reencode_webm(local_file_path, reencoded_path, FFMPEG_PATH)
+            local_file_path = reencoded_path
 
         # Convert to WebM if necessary
         webm_file_path = f"/tmp/{audio_key}.webm"
@@ -86,13 +89,13 @@ def lambda_handler(event, context):
         s3_client.upload_file(webm_file_path, bucket_name, compressed_key)
         logger.info(f"WebM file saved to S3 at {compressed_key}")
 
-        # Get compressed audio metadata and create complete metadata object
-        compressed_metadata = get_audio_metadata(webm_file_path, FFMPEG_PATH)
+        # Get metadata object
+        metadata = get_audio_metadata(local_file_path, FFMPEG_PATH)
 
         # Combine all metadata
         complete_metadata = {
-            "original": {"format": media_format, **original_metadata},
-            "compressed": {"format": "webm", **compressed_metadata},
+            "format": media_format,
+            **metadata,
             "s3_compressed_audio_url": f"s3://{bucket_name}/{compressed_key}",
             "conversion_status": conversion_status,
         }
@@ -108,13 +111,6 @@ def lambda_handler(event, context):
             DB_HOST,
             DB_PORT,
         )
-
-        # Clean up temporary files
-        try:
-            os.remove(local_file_path)
-            os.remove(webm_file_path)
-        except Exception as e:
-            logger.warning(f"Error cleaning up temporary files: {e}")
 
         return {
             "statusCode": 200,

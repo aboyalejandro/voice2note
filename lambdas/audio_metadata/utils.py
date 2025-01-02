@@ -27,6 +27,8 @@ def reencode_webm(input_file, output_file, ffmpeg_path):
                 ffmpeg_path,
                 "-i",
                 input_file,
+                "-map_metadata",
+                "-1",  # Clear metadata
                 "-c:v",
                 "copy",
                 "-c:a",
@@ -68,7 +70,7 @@ def convert_to_webm(input_file, output_file, ffmpeg_path):
 
 def get_audio_metadata(input_file, ffmpeg_path):
     """
-    Extract metadata from an audio file using ffmpeg.
+    Extract metadata from an audio file using ffmpeg, re-encode if metadata is missing.
     """
     try:
         result = subprocess.run(
@@ -96,6 +98,11 @@ def get_audio_metadata(input_file, ffmpeg_path):
                 metadata["audio_details"] = str(line.strip())
 
         metadata["size"] = os.path.getsize(input_file)
+
+        # Check if duration is missing, indicating a metadata issue
+        if metadata.get("duration") == "00:00:00":
+            raise ValueError("Missing duration in metadata")
+
         return metadata
     except Exception as e:
         logger.error(f"Error extracting metadata: {e}")

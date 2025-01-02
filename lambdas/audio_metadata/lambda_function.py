@@ -1,18 +1,21 @@
-import os
 import boto3
 import json
+import os
 from aws_lambda_powertools import Logger
 from utils import (
+    convert_to_webm,
     validate_file_extension,
     get_audio_metadata,
-    save_metadata_to_postgresql,
+    save_to_postgresql,
+    reencode_webm,
 )
 
 # Setup logging
-logger = Logger(service="v2n_audio_metadata_processing")
+logger = Logger(service="v2n_audio_processing")
 
 # AWS clients
 s3_client = boto3.client("s3")
+aws_region = "eu-east-1"
 
 # PostgreSQL connection parameters from environment variables
 DB_HOST = os.getenv("DB_HOST")
@@ -33,12 +36,21 @@ def lambda_handler(event, context):
         bucket_name = message["bucket_name"]
         object_key = message["object_key"]
 
-        logger.info(f"New file detected: {object_key} in bucket {bucket_name}")
+        logger.info(f"Processing file: {object_key} in bucket {bucket_name}")
 
         # Validate path
-        if "audios /raw/" not in object_key:
-            logger.info(f"Skipping: {object_key} (not in audios /raw/).")
-            return
+        if "audios/raw/" not in object_key:
+            message = f"Skipping: {object_key} (not in audios/raw/)."
+            logger.info(message)
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"message": message, "status": "skipped"}),
+            }
+
+        # Extract assets
+        path_parts = object_key.split("/")
+        user_id = path_parts[0].replace("user_", "")
+        audio_key, extension = os.path.splitext(path_parts[3])
 
         # Validate file extension
         is_valid, media_format = validate_file_extension(object_key)
@@ -47,34 +59,49 @@ def lambda_handler(event, context):
                 f"Invalid file extension for {object_key}. Only .mp3, .wav, and .webm are supported."
             )
 
-        # Extract assets
-        path_parts = object_key.split("/")
-        user_id = path_parts[0].replace("user_", "")
-        audio_key = path_parts[3].replace(f".{media_format}", "")
-        logger.info(f"Processing audio {audio_key} for user {user_id}")
-
         # Download file from S3 to /tmp
         local_file_path = f"/tmp/{audio_key}.{media_format}"
         s3_client.download_file(bucket_name, object_key, local_file_path)
 
-        # Extract metadata
-        metadata = get_audio_metadata(local_file_path, FFMPEG_PATH)
+        # Get original audio metadata
+        original_metadata = get_audio_metadata(local_file_path, FFMPEG_PATH)
 
-        # Save metadata to S3
-        metadata_key = f"user_{user_id}/audios/metadata/{audio_key}.json"
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=metadata_key,
-            Body=json.dumps(metadata),
-            ContentType="application/json",
-        )
-        logger.info(f"Metadata saved to S3 at {metadata_key}")
+        # Convert to WebM if necessary
+        webm_file_path = f"/tmp/{audio_key}.webm"
+        conversion_status = "no_conversion_needed"
 
-        # Update PostgreSQL
-        save_metadata_to_postgresql(
+        if media_format != "webm":
+            convert_to_webm(local_file_path, webm_file_path, FFMPEG_PATH)
+            logger.info(f"File converted from {media_format} to webm")
+            conversion_status = "converted"
+        else:
+            logger.info(
+                f"File is already in webm format, reencoding to ensure proper metadata"
+            )
+            reencode_webm(local_file_path, webm_file_path, FFMPEG_PATH)
+            conversion_status = "reencoded"
+
+        # Upload WebM file to S3
+        compressed_key = f"user_{user_id}/audios/compressed/{audio_key}.webm"
+        s3_client.upload_file(webm_file_path, bucket_name, compressed_key)
+        logger.info(f"WebM file saved to S3 at {compressed_key}")
+
+        # Get compressed audio metadata and create complete metadata object
+        compressed_metadata = get_audio_metadata(webm_file_path, FFMPEG_PATH)
+
+        # Combine all metadata
+        complete_metadata = {
+            "original": {"format": media_format, **original_metadata},
+            "compressed": {"format": "webm", **compressed_metadata},
+            "s3_compressed_audio_url": f"s3://{bucket_name}/{compressed_key}",
+            "conversion_status": conversion_status,
+        }
+
+        # Save complete metadata to PostgreSQL
+        save_to_postgresql(
             user_id,
             audio_key,
-            metadata,
+            complete_metadata,
             DB_USER,
             DB_PASSWORD,
             DB_NAME,
@@ -82,11 +109,40 @@ def lambda_handler(event, context):
             DB_PORT,
         )
 
+        # Clean up temporary files
+        try:
+            os.remove(local_file_path)
+            os.remove(webm_file_path)
+        except Exception as e:
+            logger.warning(f"Error cleaning up temporary files: {e}")
+
         return {
             "statusCode": 200,
-            "body": f"Metadata processed and saved for {object_key}.",
+            "body": json.dumps(
+                {
+                    "message": f"Audio {object_key} processed successfully",
+                    "status": "success",
+                    "details": {
+                        "user_id": user_id,
+                        "audio_key": audio_key,
+                        "original_path": object_key,
+                        "compressed_path": compressed_key,
+                        "metadata": complete_metadata,
+                    },
+                }
+            ),
         }
 
     except Exception as e:
-        logger.error(f"Error processing file: {e}")
-        raise
+        error_message = str(e)
+        logger.error(f"Error processing file: {error_message}")
+        return {
+            "statusCode": 500,
+            "body": json.dumps(
+                {
+                    "message": "Error processing audio file",
+                    "error": error_message,
+                    "status": "error",
+                }
+            ),
+        }

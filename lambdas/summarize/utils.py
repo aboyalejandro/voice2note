@@ -101,3 +101,84 @@ def save_to_postgresql(
     except Exception as e:
         logger.error(f"Error saving to PostgreSQL: {e}")
         raise
+
+
+def process_vectors(
+    transcription: dict, client, user_path: str, audio_key: str, conn, cur
+):
+    """Process and store vectors for transcript text"""
+    try:
+        transcript_text = transcription.get("transcript_text", "")
+        if not transcript_text:
+            logger.warn(f"No transcript text found for {audio_key}")
+            return
+
+        # Split text into chunks (~1000 chars each)
+        words = transcript_text.split()
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for word in words:
+            word_length = len(word) + 1  # +1 for space
+            if current_length + word_length > 1000:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = [word]
+                current_length = word_length
+            else:
+                current_chunk.append(word)
+                current_length += word_length
+
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+
+        # Get embeddings and store them
+        cur.execute(f"SET search_path TO {user_path}")
+
+        for chunk in chunks:
+            # Get embedding from OpenAI
+            response = client.embeddings.create(
+                model="text-embedding-ada-002", input=chunk
+            )
+            embedding = response.data[0].embedding
+
+            # Store in PostgreSQL
+            cur.execute(
+                """
+                INSERT INTO note_vectors 
+                    (audio_key, content_chunk, embedding)
+                VALUES (%s, %s, %s)
+                """,
+                (audio_key, chunk, json.dumps(embedding)),
+            )
+
+        conn.commit()
+        logger.info(f"Stored {len(chunks)} vectors for {audio_key}")
+
+    except Exception as e:
+        logger.error(f"Error processing vectors: {e}")
+        raise
+
+
+def process_and_save_vectors(
+    user_path: str,
+    audio_key: str,
+    transcription: dict,
+    client,  # OpenAI client
+    host: str,
+    db: str,
+    user: str,
+    password: str,
+    port: str,
+):
+    """Process and store vectors as a separate operation"""
+    try:
+        with psycopg2.connect(
+            host=host, database=db, user=user, password=password, port=port
+        ) as conn:
+            with conn.cursor() as cur:
+                process_vectors(transcription, client, user_path, audio_key, conn, cur)
+                logger.info(f"Vectors saved for audio_key {audio_key}")
+    except Exception as e:
+        logger.error(f"Error saving vectors: {e}")
+        raise

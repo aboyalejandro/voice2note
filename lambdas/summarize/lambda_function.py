@@ -1,7 +1,13 @@
 import os
 import boto3
 from openai import OpenAI
-from utils import get_transcript, run_llm, export_summary, save_to_postgresql
+from utils import (
+    get_transcript,
+    run_llm,
+    export_summary,
+    save_to_postgresql,
+    process_and_save_vectors,
+)
 from aws_lambda_powertools import Logger
 
 # Setup logging
@@ -75,6 +81,19 @@ def lambda_handler(event, context):
             user_path,
             audio_key,
             transcript_results,
+            DB_HOST,
+            DB_NAME,
+            DB_USER,
+            DB_PASSWORD,
+            DB_PORT,
+        )
+
+        # Save Vectors for LLM
+        process_and_save_vectors(
+            user_path,
+            audio_key,
+            transcript_results[1],
+            open_ai_client,
             DB_HOST,
             DB_NAME,
             DB_USER,

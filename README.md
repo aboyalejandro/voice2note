@@ -29,6 +29,8 @@ Voice2Note uses a combination of AWS services and OpenAI's GPT to process your a
 4. **Organization**: Notes are stored with metadata for easy searching
 5. **Access**: Browse, search, and edit your notes anytime
 
+## Project Structure 🏗️
+
 ## Tech Stack 🛠️
 
 - **Frontend**: FastHTML, JavaScript

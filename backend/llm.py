@@ -2,8 +2,8 @@ import openai
 import numpy as np
 import json
 from typing import List, Tuple
-from config import logger
-from config import OPENAI_API_KEY
+from backend.config import logger
+from backend.config import OPENAI_API_KEY
 from collections import defaultdict
 from time import time
 

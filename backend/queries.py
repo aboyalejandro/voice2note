@@ -1,4 +1,4 @@
-from config import conn, logger
+from backend.config import conn, logger
 
 cursor = conn.cursor()
 

@@ -6,15 +6,15 @@ import bcrypt
 import uuid
 import io
 from starlette.responses import StreamingResponse
-from queries import (
+from backend.queries import (
     create_user_schema,
     validate_schema,
     get_notes,
     get_note_detail,
 )
-from styles import get_common_styles
-from config import conn, s3, logger, AWS_S3_BUCKET
-from llm import (
+from frontend.styles import get_common_styles
+from backend.config import conn, s3, logger, AWS_S3_BUCKET
+from backend.llm import (
     get_chat_completion,
     find_relevant_context,
     generate_chat_title,
@@ -2160,7 +2160,7 @@ async def delete_note(request: Request, audio_key: str):
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Note not found")
 
-        # Soft delete
+        # Soft delete audio and transcript
         cursor.execute(
             f"""
             WITH audio_update AS (
@@ -2174,8 +2174,20 @@ async def delete_note(request: Request, audio_key: str):
             """,
             (audio_key, audio_key),
         )
+
+        # Delete vector embedding
+        cursor.execute(
+            f"""
+            DELETE FROM {schema}.note_vectors 
+            WHERE audio_key = %s
+            """,
+            (audio_key,),
+        )
+
         conn.commit()
-        logger.info(f"Removed audio and transcript for audio_key {audio_key}.")
+        logger.info(
+            f"Removed audio, transcript and vector embedding for audio_key {audio_key}."
+        )
 
         return {"success": True}
 
@@ -2520,7 +2532,6 @@ def chat_detail(request: Request, chat_id: str):
                 rel="stylesheet",
                 href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
             ),
-            Style(get_common_styles()),
             Style(
                 """
                 .chat-container {

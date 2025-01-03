@@ -1,681 +1,35 @@
 from fasthtml.common import *
-import boto3
-import os
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
-import psycopg2
 import logging
 import json
 import bcrypt
 import uuid
-from contextlib import contextmanager
 import io
 from starlette.responses import StreamingResponse
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s - %(message)s",
+from queries import (
+    create_user_schema,
+    validate_schema,
+    get_notes,
+    get_note_detail,
+)
+from styles import get_common_styles
+from config import conn, s3, logger, AWS_S3_BUCKET
+from llm import (
+    get_chat_completion,
+    find_relevant_context,
+    generate_chat_title,
+    RateLimiter,
 )
 
-logger = logging.getLogger("voice2note")
 
-# Load environment variables
-load_dotenv()
+# Limiter for LLM
+rate_limiter = RateLimiter()
 
-# AWS S3 Configuration
-s3 = boto3.client(
-    "s3",
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-)
-AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
-AWS_REGION = os.getenv("AWS_REGION")
-
-# PostgreSQL Configuration
-conn = psycopg2.connect(
-    dbname=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-    host=os.getenv("DB_HOST"),
-    port=os.getenv("DB_PORT"),
-)
+# Setup PostgreSQL
 cursor = conn.cursor()
 
 # Initialize FastHTML app
 app, rt = fast_app()
-
-
-def get_common_styles():
-    return """
-    body {
-        font-family: Arial, sans-serif;
-        background-color: #f9f9f9;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-    }
-
-    /* Update text elements to use Arial */
-    .auth-title, .title {
-        font-weight: bold;
-    }
-
-    .note-title {
-        font-weight: bold;
-    }
-
-    .form-label {
-        font-weight: 500;
-    }
-
-    .auth-btn, .search-btn, .clear-btn, .view-btn {
-        font-family: Arial, sans-serif;
-        font-weight: 500;
-    }
-
-    .note-date {
-        font-weight: 500;
-    }
-
-    .note-preview {
-        font-weight: normal;
-    }
-
-    input, textarea, button {
-        font-family: Arial, sans-serif;
-    }
-
-    .note-duration {
-        color: #666;
-        font-size: 0.9em;
-        margin: 0;
-        font-weight: bold;
-        display: inline-flex;
-        align-items: center;
-    }
-
-    .auth-container {
-        width: 90%;
-        max-width: 400px;
-        background-color: #ffffff;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        border-radius: 8px;
-    }
-    .auth-title {
-        font-size: 24px;
-        font-weight: bold;
-        color: navy;
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    .auth-form {
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }
-    .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }
-    .form-label {
-        color: navy;
-        font-weight: 500;
-    }
-    .form-input {
-        padding: 10px;
-        border: 1px solid navy;
-        border-radius: 4px;
-        font-size: 16px;
-    }
-    .form-input:focus {
-        outline: none;
-        border-color: #004080;
-        box-shadow: 0 0 0 2px rgba(0, 64, 128, 0.1);
-    }
-    .auth-btn {
-        font-size: 16px;
-        padding: 12px 20px;
-        background-color: navy;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: background-color 0.2s;
-    }
-    .auth-btn:hover {
-        background-color: #004080;
-    }
-    .auth-link {
-        text-align: center;
-        margin-top: 15px;
-        color: #666;
-    }
-    .auth-link a {
-        color: navy;
-        text-decoration: none;
-        font-weight: 500;
-    }
-    .auth-link a:hover {
-        text-decoration: underline;
-    }
-    .error-message {
-        color: #dc3545;
-        background-color: #ffe6e6;
-        padding: 10px;
-        border-radius: 4px;
-        margin-bottom: 15px;
-        font-size: 14px;
-        text-align: center;
-    }
-
-    /* Common responsive adjustments */
-    @media (max-width: 768px) {
-        body {
-            padding: 10px;
-        }
-        
-        .container {
-            width: 95%;
-            padding: 15px;
-            margin: 10px auto;
-        }
-
-        /* Auth pages responsive styles */
-        .auth-container {
-            width: 95%;
-            padding: 15px;
-            margin: 10px;
-        }
-
-        .auth-title {
-            font-size: 20px;
-        }
-
-        .form-input {
-            padding: 8px;
-            font-size: 14px;
-        }
-
-        .auth-btn {
-            padding: 10px 15px;
-            font-size: 14px;
-        }
-
-        /* Home page responsive styles */
-        .controls {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 15px;
-        }
-
-        .record-btn, .stop-btn, .upload-btn {
-            font-size: 32px;
-            padding: 8px;
-            margin: 0;
-        }
-
-        .audio-player {
-            width: 100%;
-            max-width: 300px;
-        }
-
-        .save-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .save-btn, .notes-btn {
-            width: 100%;
-            max-width: 200px;
-        }
-
-        /* Notes page responsive styles */
-        .note {
-            padding: 12px;
-        }
-
-        .note-header {
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .note-actions {
-            justify-content: flex-start;
-            width: 100%;
-        }
-
-        .note-info {
-            width: 100%;
-        }
-
-        .note-title {
-            font-size: 16px;
-            word-break: break-word;
-        }
-
-        .note-preview {
-            font-size: 13px;
-        }
-
-        .search-container {
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .date-field {
-            flex-direction: column;
-            width: 100%;
-        }
-
-        .date-input {
-            width: 100%;
-        }
-
-        .keyword-field {
-            width: 100%;
-        }
-
-        .button-field {
-            flex-direction: row;
-            justify-content: space-between;
-            width: 100%;
-        }
-
-        .search-btn, .clear-btn {
-            flex: 1;
-        }
-
-        /* Note detail page responsive styles */
-        .note-transcription {
-            font-size: 14px;
-            line-height: 1.4;
-        }
-
-        .form-textarea {
-            min-height: 200px;
-            font-size: 14px;
-        }
-
-        .form-buttons {
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .save-btn, .cancel-btn {
-            width: 100%;
-        }
-
-        .back-button {
-            margin-top: 20px;
-            margin-bottom: 15px;
-            font-size: 14px;
-            padding: 8px 12px;
-        }
-
-        /* Audio player responsive styles */
-        .audio-player {
-            width: 100%;
-            max-width: none;
-        }
-
-        /* Logout button positioning */
-        .logout-btn {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-        }
-    }
-
-    /* Small phones */
-    @media (max-width: 380px) {
-        .auth-title {
-            font-size: 18px;
-        }
-
-        .record-btn, .stop-btn, .upload-btn {
-            font-size: 28px;
-            padding: 6px;
-        }
-
-        .note-title .note-duration {
-            font-size: 14px;
-        }
-
-        .note-preview {
-            font-size: 12px;
-        }
-    }
-
-    /* Landscape orientation adjustments */
-    @media (max-height: 600px) and (orientation: landscape) {
-        body {
-            height: auto;
-            min-height: 100vh;
-        }
-
-        .container {
-            margin: 60px auto;
-        }
-
-        .audio-wrapper {
-            margin: 10px 0;
-        }
-
-        .controls {
-            margin: 10px 0;
-        }
-    }
-
-    /* Dark mode detection */
-    @media (prefers-color-scheme: dark) {
-        body {
-            background-color: #1a1a1a;
-            color: #ffffff;
-        }
-
-        .container, .auth-container {
-            background-color: #2d2d2d;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        }
-
-        .note {
-            background-color: #3d3d3d;
-        }
-
-        .note-title {
-            color: #66b3ff;
-        }
-
-        .form-input, .form-textarea {
-            background-color: #3d3d3d;
-            color: #ffffff;
-            border-color: #4d4d4d;
-        }
-
-        .search-container {
-            background-color: #3d3d3d;
-        }
-    }
-
-    /* Search container styles */
-    .search-container {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        padding: 12px;
-        background-color: #f3f3f3;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    .date-field {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex: 1;  /* Allow date field to grow */
-    }
-
-    .keyword-field {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex: 2;  /* Give keyword field more growing space */
-    }
-
-    .keyword-input {
-        padding: 6px 12px;
-        border: 1px solid navy;
-        border-radius: 4px;
-        color: #333;
-        width: 100%;
-        font-size: 14px;
-    }
-
-    .keyword-input::placeholder {
-        color: #999;
-    }
-
-    .date-input {
-        padding: 6px;
-        border: 1px solid navy;
-        border-radius: 4px;
-        color: #333;
-        width: 130px;
-        font-size: 14px;
-        flex: 1;  /* Allow inputs to grow within date-field */
-        min-width: 110px;  /* Minimum width to prevent too much shrinking */
-    }
-
-    .date-input::-webkit-calendar-picker-indicator {
-        cursor: pointer;
-    }
-
-    /* Note actions alignment */
-    .note-actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
-        .search-container {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .date-field, .keyword-field {
-            width: 100%;
-        }
-
-        .date-field {
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .note-header {
-            flex-direction: row;  /* Keep horizontal layout */
-            justify-content: space-between;
-            align-items: center;  /* Center align items vertically */
-        }
-
-        .note-actions {
-            justify-content: flex-end;
-            align-items: center;
-            width: auto;  /* Remove full width */
-        }
-
-        .note-info {
-            flex: 1;  /* Allow info to take remaining space */
-        }
-    }
-
-    @media (max-width: 400px) {
-        .date-input {
-            min-width: 90px;  /* Even smaller minimum width for very small screens */
-        }
-
-        .date-field span {
-            min-width: 35px;
-        }
-    }
-
-    /* Search container and button styles */
-    .search-container {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        padding: 12px;
-        background-color: #f3f3f3;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    .button-field {
-        display: flex;
-        gap: 6px;
-    }
-
-    .search-btn, .clear-btn {
-        padding: 6px 12px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 16px;
-    }
-
-    .search-btn {
-        background-color: navy;
-        color: white;
-    }
-
-    .clear-btn {
-        background-color: #666;
-        color: white;
-    }
-
-    /* Responsive adjustments */
-    @media (max-width: 755px) {
-        .search-container {
-            flex-direction: column;
-            align-items: stretch;
-        }
-        
-        .date-field, .keyword-field {
-            width: 100%;
-        }
-        
-        .button-field {
-            display: flex;
-            gap: 10px;
-            width: 100%;
-        }
-        
-        .search-btn, .clear-btn {
-            flex: 1;  /* Make buttons expand equally */
-            padding: 10px;  /* Slightly larger padding for better touch targets */
-        }
-    }
-
-    /* Add back the logout button styles */
-    .logout-btn {
-        padding: 8px 16px;
-        background-color: #dc3545;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: background-color 0.2s;
-    }
-
-    .logout-btn:hover {
-        background-color: #c82333;
-    }
-    """
-
-
-def create_user_schema(user_id: int):
-    """Creates a new schema and required tables for a user"""
-    logger.info(f"Starting schema creation for user_id: {user_id}")
-    try:
-        # Create schema
-        cursor.execute(f"CREATE SCHEMA IF NOT EXISTS user_{user_id}")
-        logger.info(f"Schema user_{user_id} created successfully")
-
-        # Create audios table
-        cursor.execute(
-            f"""
-            CREATE TABLE user_{user_id}.audios (
-                audio_id serial4 NOT NULL,
-                audio_key varchar(15) NOT NULL,
-                user_id int4 NOT NULL,
-                s3_object_url text NOT NULL,
-                audio_type varchar(8) NOT NULL,
-                created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                deleted_at timestamp NULL,
-                metadata jsonb NULL,
-                CONSTRAINT audios_audio_key_key UNIQUE (audio_key),
-                CONSTRAINT audios_audio_type_check CHECK (
-                    audio_type = ANY (ARRAY['recorded', 'uploaded'])
-                ),
-                CONSTRAINT audios_pkey PRIMARY KEY (audio_id)
-            )
-        """
-        )
-
-        logger.info(f"Audios table created for user_{user_id}")
-
-        # Create transcripts table
-        cursor.execute(
-            f"""
-            CREATE TABLE user_{user_id}.transcripts (
-                transcript_id serial4 NOT NULL,
-                audio_key varchar(255) NOT NULL,
-                s3_object_url text NULL,
-                transcription jsonb NULL,
-                created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                deleted_at timestamp NULL,
-                CONSTRAINT transcripts_pkey PRIMARY KEY (transcript_id)
-            )
-        """
-        )
-
-        logger.info(f"Transcripts table created for user_{user_id}")
-
-        # Create indexes
-        cursor.execute(
-            f"""
-            CREATE INDEX idx_audios_audio_id ON user_{user_id}.audios USING btree (audio_id);
-            CREATE INDEX idx_transcripts_audio_id ON user_{user_id}.transcripts USING btree (audio_key);
-            CREATE INDEX idx_transcripts_transcript_id ON user_{user_id}.transcripts USING btree (transcript_id)
-        """
-        )
-
-        logger.info(f"Indexes created for user_{user_id} schema")
-
-        # Add foreign key constraints
-        cursor.execute(
-            f"""
-            ALTER TABLE user_{user_id}.audios ADD CONSTRAINT fk_user_id 
-            FOREIGN KEY (user_id) REFERENCES public.users(user_id);
-            
-            ALTER TABLE user_{user_id}.transcripts ADD CONSTRAINT transcripts_audio_key_fkey 
-            FOREIGN KEY (audio_key) REFERENCES user_{user_id}.audios(audio_key)
-        """
-        )
-
-        logger.info(f"Foreign key constraints added for user_{user_id}")
-
-        conn.commit()
-        logger.info(f"Schema creation completed successfully for user_{user_id}")
-        return True
-
-    except Exception as e:
-        conn.rollback()
-        logging.error(f"Error creating schema for user_{user_id}: {str(e)}")
-        raise
-
-
-@contextmanager
-def use_user_schema(user_id: int):
-    """Context manager to temporarily switch to a user's schema"""
-    try:
-        cursor.execute(f"SET search_path TO user_{user_id}")
-        yield
-    finally:
-        cursor.execute("SET search_path TO public")
 
 
 @rt("/login")
@@ -862,6 +216,14 @@ async def api_signup(request):
             secure=True,
             samesite="lax",
         )
+        response.set_cookie(
+            key="schema",
+            value=f"{user_id}",
+            httponly=True,
+            max_age=7 * 24 * 60 * 60,
+            secure=True,
+            samesite="lax",
+        )
         return response
 
     except Exception as e:
@@ -960,6 +322,14 @@ async def api_login(request):
             secure=True,
             samesite="lax",
         )
+        response.set_cookie(
+            key="schema",
+            value=f"user_{user[0]}",
+            httponly=True,
+            max_age=7 * 24 * 60 * 60,
+            secure=True,
+            samesite="lax",
+        )
         return response
 
     except Exception as e:
@@ -996,24 +366,6 @@ async def api_logout(request):
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(key="session_id")
     return response
-
-
-def get_current_user_id(request):
-    session_id = request.cookies.get("session_id")
-    if not session_id:
-        return None
-
-    cursor.execute(
-        """
-        SELECT user_id FROM sessions 
-        WHERE session_id = %s 
-        AND deleted_at IS NULL 
-        AND expires_at > CURRENT_TIMESTAMP
-        """,
-        (session_id,),
-    )
-    result = cursor.fetchone()
-    return result[0] if result else None
 
 
 @rt("/forgot-password")
@@ -1235,8 +587,8 @@ async def reset_password_submit(request):
 
 @rt("/")
 def home(request):
-    user_id = get_current_user_id(request)
-    if not user_id:
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
         return RedirectResponse(url="/login", status_code=303)
     return Html(
         Head(
@@ -1296,6 +648,13 @@ def home(request):
                         cls="stop-btn",
                         title="Stop Recording",
                         disabled=True,
+                    ),
+                    Button(
+                        I(cls="fas fa-robot"),  # Added chat robot icon
+                        id="chat",
+                        cls="chat-btn",
+                        title="Chat with Notes",
+                        onclick="startNewChat()",
                     ),
                     cls="controls",
                 ),
@@ -1434,6 +793,18 @@ def home(request):
                     .logout-btn:hover {
                         background-color: #c82333;
                     }
+                    .chat-btn {
+                        font-size: 40px;
+                        background: none;
+                        border: none;
+                        cursor: pointer;
+                        padding: 10px;
+                        margin: 0 10px;
+                        color: navy;
+                    }
+                    .chat-btn:hover {
+                        color: #2196F3;
+                    }
                     """
                 ),
                 Script(
@@ -1474,111 +845,116 @@ def home(request):
                         }
                     });
 
-            document.getElementById('stop').addEventListener('click', () => {
-                if (mediaRecorder && mediaRecorder.state === 'recording') {
-                    mediaRecorder.stop();
-                    document.getElementById('start').disabled = false;
-                    document.getElementById('stop').disabled = true;
-                    mediaRecorder.stream.getTracks().forEach(track => track.stop());
-                }
-            });
-
-            document.getElementById('start').addEventListener('click', () => {
-                navigator.mediaDevices.getUserMedia({ audio: true })
-                    .then(stream => {
-                        const options = {
-                            mimeType: 'audio/webm;codecs=opus',
-                            audioBitsPerSecond: 128000
-                        };
-                        
-                        mediaRecorder = new MediaRecorder(stream, options);
-                        recordingDuration = 0;
-                        audioChunks = [];
-                        
-                        mediaRecorder.ondataavailable = event => {
-                            audioChunks.push(event.data);
-                        };
-
-                        mediaRecorder.onstop = () => {
-                            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                            const audioUrl = URL.createObjectURL(audioBlob);
-                            const audioPlayback = document.getElementById('audioPlayback');
-                            audioPlayback.src = audioUrl;
-                            
-                            clearInterval(recordInterval);
-                            document.getElementById('recordTimer').style.display = 'none';
-                            
-                            window.audioBlob = audioBlob;
-                            window.audioType = 'recorded';
-                            document.getElementById('save').disabled = false;
-                        };
-
-                        mediaRecorder.start(1000);
-                        document.getElementById('start').disabled = true;
-                        document.getElementById('stop').disabled = false;
-
-                        const timerElement = document.getElementById('recordTimer');
-                        timerElement.style.display = 'block';
-                        
-                        recordInterval = setInterval(() => {
-                            recordingDuration++;
-                            const minutes = Math.floor(recordingDuration / 60);
-                            const displaySeconds = recordingDuration % 60;
-                            timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
-                        }, 1000);
-                    })
-                    .catch(error => {
-                        console.error('Error accessing microphone:', error);
-                        alert('Error accessing microphone. Please ensure you have given permission.');
-                    });
-            });
-
-            document.getElementById('save').addEventListener('click', () => {
-                const audioBlob = window.audioBlob;
-                const audioType = window.audioType;
-                const saveButton = document.getElementById('save');
-
-                if (!audioBlob) {
-                    alert('No audio to save!');
-                    return;
-                }
-
-                const formData = new FormData();
-                const timestamp = Math.floor(Date.now() / 1000);
-                const extension = audioBlob.type.split('/')[1]; // Extract file extension
-                const filename = `recording_${timestamp}.${extension}`;
-
-                formData.append('audio_file', audioBlob, filename);
-                formData.append('audio_type', audioType);
-
-                saveButton.textContent = 'Saving...';
-                saveButton.disabled = true;
-
-                fetch('/save-audio', {
-                    method: 'POST',
-                    body: formData,
-                })
-                    .then(response => {
-                        if (!response.ok) {
-                            return response.text().then(text => {
-                                throw new Error(`Failed to save audio: ${text}`);
-                            });
+                    document.getElementById('stop').addEventListener('click', () => {
+                        if (mediaRecorder && mediaRecorder.state === 'recording') {
+                            mediaRecorder.stop();
+                            document.getElementById('start').disabled = false;
+                            document.getElementById('stop').disabled = true;
+                            mediaRecorder.stream.getTracks().forEach(track => track.stop());
                         }
-                        return response.json();
-                    })
-                    .then(data => {
-                        alert('Audio saved successfully!');
-                        window.audioBlob = null;
-                        document.getElementById('audioPlayback').src = '';
-                    })
-                    .catch(error => {
-                        alert(error.message || 'Failed to save audio. Please try again.');
-                    })
-                    .finally(() => {
-                        saveButton.textContent = 'Save Audio';
-                        saveButton.disabled = false;
                     });
-            });
+
+                    document.getElementById('start').addEventListener('click', () => {
+                        navigator.mediaDevices.getUserMedia({ audio: true })
+                            .then(stream => {
+                                const options = {
+                                    mimeType: 'audio/webm;codecs=opus',
+                                    audioBitsPerSecond: 128000
+                                };
+                                
+                                mediaRecorder = new MediaRecorder(stream, options);
+                                recordingDuration = 0;
+                                audioChunks = [];
+                                
+                                mediaRecorder.ondataavailable = event => {
+                                    audioChunks.push(event.data);
+                                };
+
+                                mediaRecorder.onstop = () => {
+                                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                                    const audioUrl = URL.createObjectURL(audioBlob);
+                                    const audioPlayback = document.getElementById('audioPlayback');
+                                    audioPlayback.src = audioUrl;
+                                    
+                                    clearInterval(recordInterval);
+                                    document.getElementById('recordTimer').style.display = 'none';
+                                    
+                                    window.audioBlob = audioBlob;
+                                    window.audioType = 'recorded';
+                                    document.getElementById('save').disabled = false;
+                                };
+
+                                mediaRecorder.start(1000);
+                                document.getElementById('start').disabled = true;
+                                document.getElementById('stop').disabled = false;
+
+                                const timerElement = document.getElementById('recordTimer');
+                                timerElement.style.display = 'block';
+                                
+                                recordInterval = setInterval(() => {
+                                    recordingDuration++;
+                                    const minutes = Math.floor(recordingDuration / 60);
+                                    const displaySeconds = recordingDuration % 60;
+                                    timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
+                                }, 1000);
+                            })
+                            .catch(error => {
+                                console.error('Error accessing microphone:', error);
+                                alert('Error accessing microphone. Please ensure you have given permission.');
+                            });
+                    });
+
+                    document.getElementById('save').addEventListener('click', () => {
+                        const audioBlob = window.audioBlob;
+                        const audioType = window.audioType;
+                        const saveButton = document.getElementById('save');
+
+                        if (!audioBlob) {
+                            alert('No audio to save!');
+                            return;
+                        }
+
+                        const formData = new FormData();
+                        const timestamp = Math.floor(Date.now() / 1000);
+                        const extension = audioBlob.type.split('/')[1]; // Extract file extension
+                        const filename = `recording_${timestamp}.${extension}`;
+
+                        formData.append('audio_file', audioBlob, filename);
+                        formData.append('audio_type', audioType);
+
+                        saveButton.textContent = 'Saving...';
+                        saveButton.disabled = true;
+
+                        fetch('/save-audio', {
+                            method: 'POST',
+                            body: formData,
+                        })
+                            .then(response => {
+                                if (!response.ok) {
+                                    return response.text().then(text => {
+                                        throw new Error(`Failed to save audio: ${text}`);
+                                    });
+                                }
+                                return response.json();
+                            })
+                            .then(data => {
+                                alert('Audio saved successfully!');
+                                window.audioBlob = null;
+                                document.getElementById('audioPlayback').src = '';
+                            })
+                            .catch(error => {
+                                alert(error.message || 'Failed to save audio. Please try again.');
+                            })
+                            .finally(() => {
+                                saveButton.textContent = 'Save Audio';
+                                saveButton.disabled = false;
+                            });
+                    });
+
+                    function startNewChat() {
+                        const sessionId = Math.random().toString(36).substring(7);
+                        window.location.href = `/chat_${sessionId}`;
+                    }
             """
                 ),
             ),
@@ -1588,46 +964,48 @@ def home(request):
 
 @rt("/notes")
 def notes(request, start_date: str = None, end_date: str = None, keyword: str = None):
-    user_id = get_current_user_id(request)
-    if not user_id:
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
     # Build query based on filters
-    query = """
-        SELECT 
-            audios.audio_key,
-            TO_CHAR(audios.created_at, 'MM/DD') as note_date,
-            COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
-            COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as note_summary,
-            CASE WHEN metadata->>'duration' is null or metadata->>'duration' = 'N/A' THEN '...' ELSE COALESCE(concat(split_part(metadata->>'duration',':',2), 'm ', split_part(split_part(metadata->>'duration',':',3),'.',1) , 's') , '...') end as duration
-        FROM audios
-        LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
-        WHERE audios.deleted_at IS NULL
-    """
+    query = get_notes(schema)
     query_params = []
 
     # Add date filtering if dates are provided
-    if start_date and end_date:
-        query += " AND DATE(audios.created_at) BETWEEN %s AND %s"
-        query_params.extend([start_date, end_date])
-    elif start_date:
-        query += " AND DATE(audios.created_at) >= %s"
-        query_params.append(start_date)
-    elif end_date:
-        query += " AND DATE(audios.created_at) <= %s"
-        query_params.append(end_date)
+    if start_date or end_date:
+        query += " WHERE DATE(sort_date)"
+        if start_date and end_date:
+            query += " BETWEEN %s AND %s"
+            query_params.extend([start_date, end_date])
+        elif start_date:
+            query += " >= %s"
+            query_params.append(start_date)
+        elif end_date:
+            query += " <= %s"
+            query_params.append(end_date)
 
     # Add keyword search if provided
     if keyword:
-        query += " AND (transcription->>'transcript_text' ILIKE %s OR transcription->>'note_title' ILIKE %s)"
-        query_params.extend([f"%{keyword}%", f"%{keyword}%"])
+        keyword_condition = f"""
+        {' WHERE ' if not (start_date or end_date) else ' AND '}(
+            title ILIKE %s 
+            OR preview ILIKE %s
+            OR content_id IN (
+                SELECT chat_id 
+                FROM {schema}.chat_messages 
+                WHERE content ILIKE %s
+            )
+        )"""
+        query += keyword_condition
+        query_params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
 
-    query += " ORDER BY audios.created_at DESC"
+    query += " ORDER BY sort_date DESC"
 
     # Execute query in user's schema
-    with use_user_schema(user_id):
-        cursor.execute(query, query_params)
-        notes = cursor.fetchall()
+    cursor.execute(query, query_params)
+    items = cursor.fetchall()
+    conn.commit()
 
     # Create search form with both date and keyword fields
     search_form = Div(
@@ -1681,34 +1059,44 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
         cls="search-wrapper",
     )
 
-    note_cards = [
+    content_cards = [
         Div(
             Div(
                 Div(
-                    P(note[1], cls="note-date"),
-                    P(note[2], cls="note-title"),
+                    P(item[2], cls="note-date"),  # created_date
+                    P(item[3], cls="note-title"),  # title
                     cls="note-info",
                 ),
                 Div(
+                    # For chats, show robot icon
+                    (
+                        I(cls="fas fa-robot", style="color: #2196F3; font-size: 1.2em;")
+                        if item[0] == "chat"
+                        else None
+                    ),
                     P(
-                        note[4] if note[4] else "0.00s",
-                        cls="note-duration",
+                        item[5],  # duration or message count
+                        cls=(
+                            "note-duration"
+                            if item[0] == "note"
+                            else "chat-message-count"
+                        ),
                     ),
                     cls="note-actions",
                 ),
                 cls="note-header",
             ),
-            P(note[3], cls="note-preview"),
+            P(item[4], cls="note-preview"),  # preview
             Div(
                 A(
-                    Button("\u2192", cls="view-btn"),
-                    href=f"/note_{note[0]}",
+                    Button("View", cls="view-btn"),
+                    href=f"/{'note' if item[0] == 'note' else 'chat'}_{item[1]}",
                 ),
                 style="text-align: right; margin-top: 10px;",
             ),
-            cls="note",
+            cls=f"{'note' if item[0] == 'note' else 'chat'}",
         )
-        for note in notes
+        for item in items
     ]
 
     return Html(
@@ -2016,6 +1404,99 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                         padding: 10px;  /* Slightly larger padding for better touch targets */
                     }
                 }
+                .chat {
+                    display: flex;
+                    flex-direction: column;
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin-bottom: 15px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                    border-left: 3px solid #2196F3;
+                }
+
+                .chat .note-title {
+                    color: #2196F3;
+                    font-size: clamp(0.9em, 2vw, 1.2em);
+                    margin: 0;
+                    word-break: break-word;
+                    line-height: 1.3;
+                }
+
+                .chat-message-count {
+                    color: #666;
+                    font-size: 0.9em;
+                    margin: 0;
+                    font-weight: bold;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 5px;
+                }
+
+                .chat .note-preview {
+                    color: #555;
+                    font-size: 14px;
+                    display: -webkit-box;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    -webkit-line-clamp: 2;
+                    font-style: italic;
+                }
+
+                .fa-robot {
+                    color: #2196F3;
+                    font-size: 1.2em;
+                    margin-right: 8px;
+                }
+
+                /* Responsive adjustments */
+                @media (max-width: 768px) {
+                    .chat {
+                        padding: 12px;
+                    }
+
+                    .chat .note-header {
+                        flex-direction: row;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+
+                    .chat-message-count {
+                        font-size: 0.85em;
+                    }
+
+                    .chat .note-preview {
+                        font-size: 13px;
+                        -webkit-line-clamp: 2;
+                    }
+                }
+
+                @media (max-width: 480px) {
+                    .chat {
+                        padding: 10px;
+                    }
+
+                    .chat .note-title {
+                        font-size: 0.95em;
+                    }
+
+                    .chat-message-count {
+                        font-size: 0.8em;
+                    }
+
+                    .fa-robot {
+                        font-size: 1.1em;
+                        margin-right: 6px;
+                    }
+                }
+
+                /* Landscape mode adjustments */
+                @media (max-height: 600px) and (orientation: landscape) {
+                    .chat {
+                        margin-bottom: 10px;
+                    }
+                }
                 """
             ),
             Script(
@@ -2071,9 +1552,9 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 Div(
                     search_form,
                     *(
-                        note_cards
-                        if note_cards
-                        else "Your notes will show up here when you record or upload them."
+                        content_cards
+                        if content_cards
+                        else "Your notes and chats will show up here when you record or upload them."
                     ),
                     cls="container",
                 ),
@@ -2085,27 +1566,16 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
 @rt("/note_{audio_key}")
 def note_detail(request: Request, audio_key: str):
     # Get current user_id from session
-    user_id = get_current_user_id(request)
-    if not user_id:
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
     # Query note details in user's schema
-    with use_user_schema(user_id):
-        cursor.execute(
-            """
-            SELECT 
-                audios.audio_key,
-                TO_CHAR(audios.created_at, 'MM/DD') as note_date,
-                COALESCE(transcription->>'note_title','Transcribing note...') as note_title,
-                COALESCE(transcription->>'transcript_text','Your audio is being transcribed. It will show up in here when is finished.') as note_transcription
-            FROM audios
-            LEFT JOIN transcripts ON audios.audio_key = transcripts.audio_key
-            WHERE audios.audio_key = %s
-            AND audios.deleted_at IS NULL
-            """,
-            (audio_key,),
-        )
-        note = cursor.fetchone()
+    cursor.execute(
+        get_note_detail(schema),
+        (audio_key,),
+    )
+    note = cursor.fetchone()
 
     # Handle note not found
     if not note:
@@ -2205,6 +1675,7 @@ def note_detail(request: Request, audio_key: str):
                     align-items: flex-start;
                     gap: 10px;
                 }
+
                 .delete-btn {
                     background: none;
                     border: none;
@@ -2331,12 +1802,6 @@ def note_detail(request: Request, audio_key: str):
                     width: 100%;
                     max-width: 300px;
                     margin-right: 10px;
-                }
-                
-                .note-actions {
-                    display: flex;
-                    gap: 15px;
-                    align-items: center;
                 }
 
                 .play-btn,
@@ -2622,8 +2087,8 @@ async def save_audio(
     audio_file: UploadFile,
     audio_type: str = Form(...),
 ):
-    user_id = get_current_user_id(request)
-    if not user_id:
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
@@ -2643,30 +2108,29 @@ async def save_audio(
 
         # Generate keys and paths
         timestamp = int(datetime.now().timestamp())
-        audio_key = f"{user_id}_{timestamp}"
-        s3_key = f"user_{user_id}/audios/raw/{audio_key}.{file_extension}"
+        audio_key = f"{schema}_{timestamp}"
+        s3_key = f"user_{schema}/audios/raw/{audio_key}.{file_extension}"
         s3_url = f"s3://{AWS_S3_BUCKET}/{s3_key}"
 
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
 
         # Insert record using user schema
-        query = """
-            INSERT INTO audios (audio_key, user_id, s3_object_url, audio_type, created_at)
+        query = f"""
+            INSERT INTO {schema}.audios (audio_key, user_id, s3_object_url, audio_type, created_at)
             VALUES (%s, %s, %s, %s, %s) 
             RETURNING audio_key
         """
         query_params = [
             audio_key,
-            user_id,
+            schema,
             s3_url,
             audio_type,
             datetime.now(),
         ]
 
-        with use_user_schema(user_id):
-            cursor.execute(query, query_params)
-            conn.commit()
-            logging.info(f"Database record created for audio_key: {audio_key}")
+        cursor.execute(query, query_params)
+        conn.commit()
+        logging.info(f"Database record created for audio_key: {audio_key}")
 
         # Upload to S3
         s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
@@ -2682,38 +2146,36 @@ async def save_audio(
 
 @rt("/delete-note/{audio_key}")
 async def delete_note(request: Request, audio_key: str):
-    user_id = get_current_user_id(request)
-    if not user_id:
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        # Switch to user schema for all database operations
-        with use_user_schema(user_id):
-            # Check if note exists
-            cursor.execute(
-                "SELECT 1 FROM audios WHERE audio_key = %s AND deleted_at IS NULL",
-                (audio_key,),
-            )
+        # Check if note exists
+        cursor.execute(
+            f"SELECT 1 FROM {schema}.audios WHERE audio_key = %s AND deleted_at IS NULL",
+            (audio_key,),
+        )
 
-            if not cursor.fetchone():
-                raise HTTPException(status_code=404, detail="Note not found")
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Note not found")
 
-            # Soft delete
-            cursor.execute(
-                """
-                WITH audio_update AS (
-                    UPDATE audios 
-                    SET deleted_at = CURRENT_TIMESTAMP 
-                    WHERE audio_key = %s
-                )
-                UPDATE transcripts 
+        # Soft delete
+        cursor.execute(
+            f"""
+            WITH audio_update AS (
+                UPDATE {schema}.audios 
                 SET deleted_at = CURRENT_TIMESTAMP 
                 WHERE audio_key = %s
-                """,
-                (audio_key, audio_key),
             )
-            conn.commit()
-            logger.info(f"Removed audio and transcript for audio_key {audio_key}.")
+            UPDATE {schema}.transcripts 
+            SET deleted_at = CURRENT_TIMESTAMP 
+            WHERE audio_key = %s
+            """,
+            (audio_key, audio_key),
+        )
+        conn.commit()
+        logger.info(f"Removed audio and transcript for audio_key {audio_key}.")
 
         return {"success": True}
 
@@ -2727,8 +2189,8 @@ async def delete_note(request: Request, audio_key: str):
 
 @rt("/edit-note/{audio_key}", methods=["POST"])
 async def edit_note(request: Request, audio_key: str):
-    user_id = get_current_user_id(request)
-    if not user_id:
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
@@ -2738,40 +2200,38 @@ async def edit_note(request: Request, audio_key: str):
         transcript_text = body.get("transcript_text")
         current_timestamp = datetime.now().isoformat()
 
-        # Switch to user schema
-        with use_user_schema(user_id):
-            # Verify note exists and belongs to user
-            cursor.execute(
-                "SELECT transcription FROM transcripts WHERE audio_key = %s",
-                (audio_key,),
-            )
-            result = cursor.fetchone()
-            if not result:
-                raise HTTPException(status_code=404, detail="Note not found")
+        # Verify note exists and belongs to user
+        cursor.execute(
+            f"SELECT transcription FROM {schema}.transcripts WHERE audio_key = %s",
+            (audio_key,),
+        )
+        result = cursor.fetchone()
+        if not result:
+            raise HTTPException(status_code=404, detail="Note not found")
 
-            # Get existing transcription or create new one
-            current_transcription = result[0] if result[0] else {}
+        # Get existing transcription or create new one
+        current_transcription = result[0] if result[0] else {}
 
-            # Update the transcription with new values and edited_at timestamp
-            updated_transcription = {
-                **current_transcription,
-                "note_title": note_title,
-                "transcript_text": transcript_text,
-                "edited_at": current_timestamp,
-            }
+        # Update the transcription with new values and edited_at timestamp
+        updated_transcription = {
+            **current_transcription,
+            "note_title": note_title,
+            "transcript_text": transcript_text,
+            "edited_at": current_timestamp,
+        }
 
-            # Update the entire transcription JSON
-            cursor.execute(
-                """
-                UPDATE transcripts 
-                SET transcription = %s::jsonb
-                WHERE audio_key = %s
-                """,
-                (json.dumps(updated_transcription), audio_key),
-            )
+        # Update the entire transcription JSON
+        cursor.execute(
+            f"""
+            UPDATE {schema}.transcripts 
+            SET transcription = %s::jsonb
+            WHERE audio_key = %s
+            """,
+            (json.dumps(updated_transcription), audio_key),
+        )
 
-            conn.commit()
-            logger.info(f"Updated note content for audio_key {audio_key}")
+        conn.commit()
+        logger.info(f"Updated note content for audio_key {audio_key}")
 
         return {"success": True, "audio_key": audio_key, "edited_at": current_timestamp}
 
@@ -2787,53 +2247,52 @@ async def edit_note(request: Request, audio_key: str):
 
 @rt("/get-audio/{audio_key}")
 def get_audio(request: Request, audio_key: str):
-    user_id = get_current_user_id(request)
-    if not user_id:
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
         # Get audio URL directly from s3_object_url
-        with use_user_schema(user_id):
-            cursor.execute(
-                """
-                SELECT metadata->>'s3_compressed_audio_url'
-                FROM audios 
-                WHERE audio_key = %s AND deleted_at IS NULL
-                """,
-                (audio_key,),
+        cursor.execute(
+            f"""
+            SELECT metadata->>'s3_compressed_audio_url'
+            FROM {schema}.audios 
+            WHERE audio_key = %s AND deleted_at IS NULL
+            """,
+            (audio_key,),
+        )
+        result = cursor.fetchone()
+
+        if not result:
+            raise HTTPException(status_code=404, detail="Audio not found")
+
+        s3_url = result[0]
+
+        # Extract S3 key from s3:// URI
+        if not s3_url.startswith("s3://"):
+            raise ValueError("Invalid S3 URI format")
+
+        s3_key = s3_url.replace("s3://" + AWS_S3_BUCKET + "/", "")
+        logger.info(f"Fetching audio from S3 with key: {s3_key}")
+
+        try:
+            response = s3.get_object(Bucket=AWS_S3_BUCKET, Key=s3_key)
+            audio_data = response["Body"].read()
+
+            return StreamingResponse(
+                io.BytesIO(audio_data),
+                media_type="audio/webm",
+                headers={
+                    "Accept-Ranges": "bytes",
+                },
             )
-            result = cursor.fetchone()
-
-            if not result:
-                raise HTTPException(status_code=404, detail="Audio not found")
-
-            s3_url = result[0]
-
-            # Extract S3 key from s3:// URI
-            if not s3_url.startswith("s3://"):
-                raise ValueError("Invalid S3 URI format")
-
-            s3_key = s3_url.replace("s3://" + AWS_S3_BUCKET + "/", "")
-            logger.info(f"Fetching audio from S3 with key: {s3_key}")
-
-            try:
-                response = s3.get_object(Bucket=AWS_S3_BUCKET, Key=s3_key)
-                audio_data = response["Body"].read()
-
-                return StreamingResponse(
-                    io.BytesIO(audio_data),
-                    media_type="audio/webm",
-                    headers={
-                        "Accept-Ranges": "bytes",
-                    },
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error fetching from S3 - Bucket: {AWS_S3_BUCKET}, Key: {s3_key}"
-                )
-                raise HTTPException(
-                    status_code=500, detail=f"Error fetching audio: {str(e)}"
-                )
+        except Exception as e:
+            logger.error(
+                f"Error fetching from S3 - Bucket: {AWS_S3_BUCKET}, Key: {s3_key}"
+            )
+            raise HTTPException(
+                status_code=500, detail=f"Error fetching audio: {str(e)}"
+            )
 
     except ValueError as e:
         logger.error(f"Invalid S3 URI format: {str(e)}")
@@ -2841,6 +2300,802 @@ def get_audio(request: Request, audio_key: str):
     except Exception as e:
         logger.error(f"Error in get_audio: {str(e)}")
         raise HTTPException(status_code=500, detail="Server error")
+
+
+@rt("/api/chat", methods=["POST"])
+async def chat(request: Request):
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    if not rate_limiter.is_allowed(schema):
+        raise HTTPException(status_code=429, detail="Too many requests")
+
+    try:
+        data = await request.json()
+        chat_id = data.get("chat_id")
+        message = data.get("message")
+
+        if not message:
+            raise HTTPException(status_code=400, detail="Message is required")
+
+        # First, ensure chat exists or create it
+        cursor.execute(
+            f"""
+            INSERT INTO {schema}.chats (chat_id, title)
+            VALUES (%s, %s)
+            ON CONFLICT (chat_id) DO NOTHING
+            """,
+            (chat_id, "New Chat"),
+        )
+
+        # Find relevant context from user's notes
+        relevant_chunks = find_relevant_context(schema, cursor, message)
+        context_chunks = []
+        source_keys = []
+
+        for chunk in relevant_chunks:
+            if chunk[2] > 0.7:  # Only use if similarity > 0.7
+                context_chunks.append(chunk[0])
+                source_keys.append(chunk[1])
+
+        # Construct messages for GPT
+        messages = [
+            {
+                "role": "system",
+                "content": """You are Voice2Note's AI assistant, helping users understand their transcribed voice notes.
+                Provide clear, concise responses and when referencing information, mention which note it comes from.
+                Avoid verbosity and output the responses in a reading friendly format. Treat the user as 'You', since all 
+                the questions will be about their notes.""",
+            }
+        ]
+
+        if context_chunks:
+            context_message = "Here are relevant parts of your notes:\n\n"
+            for idx, chunk in enumerate(context_chunks):
+                context_message += f"Note {idx + 1}:\n{chunk}\n\n"
+            messages.append({"role": "system", "content": context_message})
+
+        messages.append({"role": "user", "content": message})
+
+        # Get response from OpenAI
+        response = get_chat_completion(messages)
+
+        # Store user message
+        cursor.execute(
+            f"""
+            INSERT INTO {schema}.chat_messages (chat_id, role, content)
+            VALUES (%s, 'user', %s)
+            """,
+            (chat_id, message),
+        )
+
+        # Store assistant response with sources
+        cursor.execute(
+            f"""
+            INSERT INTO {schema}.chat_messages (chat_id, role, content, source_refs)
+            VALUES (%s, 'assistant', %s, %s)
+            """,
+            (
+                chat_id,
+                response,
+                json.dumps({"sources": source_keys}) if source_keys else None,
+            ),
+        )
+
+        # Check if we should generate a title
+        cursor.execute(
+            f"""
+            SELECT COUNT(*), title FROM {schema}.chat_messages 
+            JOIN {schema}.chats ON chat_messages.chat_id = chats.chat_id
+            WHERE chat_messages.chat_id = %s
+            GROUP BY title
+            """,
+            (chat_id,),
+        )
+        result = cursor.fetchone()
+
+        if result and result[0] >= 3 and result[1] == "New Chat":
+            # Get recent messages for title generation
+            cursor.execute(
+                f"""
+                SELECT role, content 
+                FROM {schema}.chat_messages 
+                WHERE chat_id = %s 
+                ORDER BY created_at ASC 
+                LIMIT 3
+                """,
+                (chat_id,),
+            )
+            title_messages = [
+                {"role": m[0], "content": m[1]} for m in cursor.fetchall()
+            ]
+
+            new_title = generate_chat_title(title_messages)
+
+            cursor.execute(
+                f"""
+                UPDATE {schema}.chats 
+                SET title = %s 
+                WHERE chat_id = %s
+                """,
+                (new_title, chat_id),
+            )
+
+        conn.commit()
+
+        return {
+            "response": response,
+            "references": (
+                json.dumps({"sources": source_keys}) if source_keys else None
+            ),
+        }
+
+    except Exception as e:
+        logger.error(f"Error in chat: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@rt("/api/delete-chat/{chat_id}", methods=["POST"])
+async def delete_chat(request: Request, chat_id: str):
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        # Verify chat exists
+        cursor.execute(
+            f"""
+            SELECT 1 FROM {schema}.chats 
+            WHERE chat_id = %s 
+            AND deleted_at IS NULL
+            """,
+            (chat_id,),
+        )
+
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Chat not found")
+
+        # Soft delete
+        cursor.execute(
+            f"""
+            UPDATE {schema}.chats 
+            SET deleted_at = CURRENT_TIMESTAMP 
+            WHERE chat_id = %s
+            """,
+            (chat_id,),
+        )
+
+        conn.commit()
+        return {"success": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting chat: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Error deleting chat")
+
+
+@rt("/chat_{chat_id}")
+def chat_detail(request: Request, chat_id: str):
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
+        return RedirectResponse(url="/login", status_code=303)
+
+    # Get chat details and messages
+    cursor.execute(
+        f"""
+        SELECT chat_id, title, created_at 
+        FROM {schema}.chats 
+        WHERE chat_id = %s AND deleted_at IS NULL
+        """,
+        (chat_id,),
+    )
+    chat = cursor.fetchone()
+
+    messages = []
+    if chat:
+        cursor.execute(
+            f"""
+            SELECT 
+                role, 
+                content, 
+                source_refs,
+                TO_CHAR(created_at, 'HH24:MI') as time
+            FROM {schema}.chat_messages 
+            WHERE chat_id = %s 
+            ORDER BY created_at ASC
+            """,
+            (chat_id,),
+        )
+        messages = cursor.fetchall()
+
+    return Html(
+        Head(
+            Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+            Title("Chat - Voice2Note"),
+            Link(
+                rel="stylesheet",
+                href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css",
+            ),
+            Style(get_common_styles()),
+            Style(
+                """
+                .chat-container {
+                    width: 90%;
+                    font-family: Arial, sans-serif;
+                    max-width: 800px;
+                    height: 90vh;
+                    display: flex;
+                    flex-direction: column;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                }
+
+                .chat-header {
+                    padding: 15px 20px;
+                    background: navy;
+                    font-family: Arial, sans-serif;
+                    color: white;
+                    border-radius: 8px 8px 0 0;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+
+                .chat-title {
+                    display: flex;
+                    align-items: center;
+                    font-family: Arial, sans-serif;
+                    gap: 10px;
+                    font-size: 1em;  /* Reduced from 1.2em */
+                    margin: 0;
+                }
+
+                .chat-title-input {
+                    background: transparent;
+                    border: 1px solid rgba(255,255,255,0.3);
+                    color: white;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    font-size: 1em;
+                    width: 100%;
+                    display: none;
+                }
+
+                .chat-title-input:focus {
+                    outline: none;
+                    border-color: white;
+                }
+
+                .chat-title-text {
+                    margin: 0;
+                    padding: 5px 10px;
+                    font-size: 1.1em;  /* Controlled size for the title text */
+                    font-weight: normal;  /* Remove bold if too heavy */
+                }
+
+                .chat-title h1 {
+                    font-size: 1.1em;  /* Control the h1 size */
+                    margin: 0;
+                    font-weight: 500;  /* Semi-bold instead of bold */
+                }
+
+                .edit-mode .chat-title-text {
+                    display: none;
+                }
+
+                .edit-mode .chat-title-input {
+                    display: block;
+                }
+
+                .chat-actions {
+                    display: flex;
+                    gap: 10px;
+                }
+
+                .action-btn {
+                    background: none;
+                    border: none;
+                    color: white;
+                    cursor: pointer;
+                    padding: 5px;
+                    font-size: 1.1em;
+                    opacity: 0.8;
+                    transition: opacity 0.2s;
+                }
+
+                .action-btn:hover {
+                    opacity: 1;
+                }
+
+                .messages-container {
+                    flex: 1;
+                    overflow-y: auto;
+                    padding: 20px;
+                    display: flex;
+                    flex-direction: column;
+                }
+
+                .message {
+                    max-width: 80%;
+                    margin-bottom: 20px;
+                    padding: 10px 15px;
+                    border-radius: 8px;
+                    position: relative;
+                }
+
+                .user-message {
+                    background: #E3F2FD;
+                    align-self: flex-end;
+                    margin-left: 20%;
+                }
+
+                .assistant-message {
+                    background: #F5F5F5;
+                    align-self: flex-start;
+                    margin-right: 20%;
+                }
+
+                .message-content {
+                    margin: 0;
+                    line-height: 1.4;
+                    white-space: pre-wrap;
+                }
+
+                .message-time {
+                    font-size: 0.8em;
+                    color: #666;
+                    margin-top: 5px;
+                    text-align: right;
+                }
+
+                .input-container {
+                    padding: 20px;
+                    border-top: 1px solid #eee;
+                    display: flex;
+                    gap: 10px;
+                }
+
+                .message-input {
+                    flex: 1;
+                    padding: 10px;
+                    border: 1px solid #ddd;
+                    border-radius: 4px;
+                    resize: none;
+                    min-height: 44px;
+                    max-height: 200px;
+                }
+
+                .send-btn {
+                    background: navy;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    transition: background-color 0.2s;
+                }
+
+                .send-btn:hover {
+                    background: #000080;
+                }
+
+                .send-btn:disabled {
+                    background: #ccc;
+                    cursor: not-allowed;
+                }
+
+                .empty-messages {
+                    text-align: center;
+                    color: #666;
+                    margin: auto;
+                }
+
+                .loading-message {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    color: #666;
+                    margin: 20px 0;
+                }
+
+                .spinner {
+                    font-size: 1.2em;
+                }
+
+                /* Landscape mode */
+                @media (max-height: 600px) and (orientation: landscape) {
+                    .chat-container {
+                        height: auto;
+                        min-height: 100vh;
+                    }
+
+                    .messages-container {
+                        max-height: 60vh;
+                    }
+
+                    .message {
+                        margin-bottom: 24px;
+                    }
+                }
+
+                .load-more-container {
+                    text-align: center;
+                    padding: 10px 0;
+                }
+
+                .load-more-btn {
+                    background: navy;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                }
+
+                .load-more-btn:hover {
+                    background: #004080;
+                }
+
+                .source-loading {
+                    margin-left: 8px;
+                    color: #666;
+                }
+                """
+            ),
+        ),
+        Script(
+            """
+            // Add at the top of chat_detail Script
+            let messageOffset = 0;
+            const messageLimit = 20;
+            let isProcessing = false;
+
+            async function sendMessage() {
+                if (isProcessing) return;
+                
+                const input = document.querySelector('.message-input');
+                const content = input.value.trim();
+                if (!content) return;
+                
+                isProcessing = true;
+                const sendBtn = document.querySelector('.send-btn');
+                sendBtn.disabled = true;
+                
+                addMessage(content, 'user');
+                input.value = '';
+                adjustTextarea(input);
+                
+                showLoadingSpinner();
+                
+                try {
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: window.location.pathname.split('_')[1],
+                            message: content
+                        })
+                    });
+
+                    removeLoadingSpinner();
+                    
+                    if (!response.ok) {
+                        throw new Error(await response.text());
+                    }
+
+                    const data = await response.json();
+                    if (!data.response) {
+                        throw new Error('Invalid response format');
+                    }
+
+                    addMessage(data.response, 'assistant', data.references);
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    removeLoadingSpinner();
+                    addMessage('An error occurred. Please try again.', 'assistant');
+                } finally {
+                    isProcessing = false;
+                    sendBtn.disabled = false;
+                }
+            }
+
+            function addMessage(content, role, references = null, time = null) {
+                const container = document.querySelector('.messages-container');
+                const message = document.createElement('div');
+                message.className = `message ${role}-message`;
+                
+                let html = `<div class="message-content">${content}</div>`;
+                
+                if (time) {
+                    html += `<div class="message-time">${time}</div>`;
+                }
+                
+                message.innerHTML = html;
+                container.appendChild(message);
+                container.scrollTop = container.scrollHeight;
+            }
+
+            function adjustTextarea(el) {
+                el.style.height = '44px';
+                el.style.height = (el.scrollHeight) + 'px';
+            }
+
+            function showLoadingSpinner() {
+                const container = document.querySelector('.messages-container');
+                const loading = document.createElement('div');
+                loading.className = 'loading-message';
+                loading.innerHTML = `
+                    <div class="spinner">
+                        <i class="fas fa-circle-notch fa-spin"></i>
+                    </div>
+                    <p>Thinking...</p>
+                `;
+                container.appendChild(loading);
+                container.scrollTop = container.scrollHeight;
+            }
+
+            function removeLoadingSpinner() {
+                const spinner = document.querySelector('.loading-message');
+                if (spinner) spinner.remove();
+            }
+
+            function showSourceLoading(event) {
+                const link = event.currentTarget;
+                const loadingSpinner = link.nextElementSibling;
+                loadingSpinner.style.display = 'inline-block';
+            }
+
+            function toggleTitleEdit(show) {
+                const titleContainer = document.querySelector('.chat-title');
+                const titleText = titleContainer.querySelector('.chat-title-text');
+                const titleInput = titleContainer.querySelector('.chat-title-input');
+                
+                if (show) {
+                    titleContainer.classList.add('edit-mode');
+                    titleInput.value = titleText.textContent;
+                    titleInput.focus();
+                } else {
+                    titleContainer.classList.remove('edit-mode');
+                }
+            }
+
+            async function saveChatTitle(chatId) {
+                const titleContainer = document.querySelector('.chat-title');
+                const titleInput = titleContainer.querySelector('.chat-title-input');
+                const titleText = titleContainer.querySelector('.chat-title-text');
+                const newTitle = titleInput.value.trim();
+
+                if (!newTitle) {
+                    alert("Title cannot be empty");
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/api/edit-chat-title/${chatId}`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ title: newTitle }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error("Failed to update chat title");
+                    }
+
+                    const data = await response.json();
+                    titleText.textContent = data.new_title;
+                    toggleTitleEdit(false);
+                } catch (error) {
+                    console.error("Error updating chat title:", error);
+                    alert("Failed to update chat title");
+                }
+            }
+
+            // Event listeners
+            document.addEventListener('DOMContentLoaded', () => {
+                const input = document.querySelector('.message-input');
+                const container = document.querySelector('.messages-container');
+                
+                container.scrollTop = container.scrollHeight;
+                
+                input.addEventListener('input', (e) => {
+                    adjustTextarea(e.target);
+                });
+                
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendMessage();
+                    }
+                });
+
+                const titleInput = document.querySelector('.chat-title-input');
+                if (titleInput) {
+                    titleInput.addEventListener('keydown', (e) => {
+                        const chatId = window.location.pathname.split('_')[1];
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            saveChatTitle(chatId);
+                        } else if (e.key === 'Escape') {
+                            toggleTitleEdit(false);
+                        }
+                    });
+                }
+            });
+            """
+        ),
+        Body(
+            Div(
+                Div(
+                    Div(
+                        I(cls="fas fa-robot"),
+                        Div(
+                            H1(
+                                chat[1] if chat else "Ask your notes!",
+                                cls="chat-title-text",
+                            ),
+                            Input(
+                                type="text",
+                                cls="chat-title-input",
+                                value=chat[1] if chat else "Ask your notes!",
+                            ),
+                            cls="chat-title",
+                        ),
+                        Div(
+                            Button(
+                                I(cls="fas fa-pencil-alt"),
+                                cls="action-btn edit-title-btn",
+                                title="Edit chat title",
+                                onclick="toggleTitleEdit(true)",
+                            ),
+                            Button(
+                                I(cls="fas fa-trash"),
+                                cls="action-btn delete-btn",
+                                title="Delete chat",
+                                onclick="deleteChat()",
+                            ),
+                            A(
+                                Button(
+                                    I(cls="fas fa-arrow-left"),
+                                    cls="action-btn",
+                                    title="Back to notes",
+                                ),
+                                href="/notes",
+                            ),
+                            cls="chat-actions",
+                        ),
+                        cls="chat-header",
+                    ),
+                    Div(
+                        *(
+                            [
+                                Button(
+                                    "Load More",
+                                    cls="load-more-btn",
+                                    onclick="loadMoreMessages()",
+                                )
+                            ]
+                            if len(messages) >= 20
+                            else []
+                        ),
+                        cls="load-more-container",
+                    ),
+                    Div(
+                        *(
+                            [
+                                Div(
+                                    Div(msg[1], cls="message-content"),  # content
+                                    Div(msg[3], cls="message-time"),  # time
+                                    cls=f"message {msg[0]}-message",
+                                )
+                                for msg in messages
+                            ]
+                            if messages
+                            else [
+                                Div(
+                                    "Ask anything about your notes. Start the conversation by typing a message below.",
+                                    cls="empty-messages",
+                                )
+                            ]
+                        ),
+                        cls="messages-container",
+                    ),
+                    Div(
+                        Textarea(
+                            placeholder="Type your message...",
+                            cls="message-input",
+                            rows="1",
+                        ),
+                        Button(
+                            I(cls="fas fa-paper-plane"),
+                            cls="send-btn",
+                            onclick="sendMessage()",
+                        ),
+                        cls="input-container",
+                    ),
+                    cls="chat-container",
+                ),
+            ),
+        ),
+    )
+
+
+@rt("/api/chat/{chat_id}/messages")
+async def get_chat_messages(request: Request, chat_id: str, offset: int = 0):
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        cursor.execute(
+            f"""
+            SELECT role, content, source_refs, 
+                    TO_CHAR(created_at, 'HH24:MI') as time
+            FROM {schema}.chat_messages 
+            WHERE chat_id = %s
+            ORDER BY created_at DESC
+            LIMIT 20 OFFSET %s
+            """,
+            (chat_id, offset),
+        )
+        messages = cursor.fetchall()
+
+        return [
+            {
+                "role": msg[0],
+                "content": msg[1],
+                "source_refs": msg[2],
+                "time": msg[3],
+            }
+            for msg in messages
+        ]
+
+    except Exception as e:
+        logger.error(f"Error fetching messages: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching messages")
+
+
+@rt("/api/edit-chat-title/{chat_id}", methods=["POST"])
+async def edit_chat_title(request: Request, chat_id: str):
+    schema = validate_schema(request.cookies.get("schema"))
+    if not schema:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        # Get the updated title from the request
+        body = await request.json()
+        new_title = body.get("title")
+
+        if not new_title or new_title.strip() == "":
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+
+        # Update the chat title
+        cursor.execute(
+            f"""
+            UPDATE {schema}.chats 
+            SET title = %s 
+            WHERE chat_id = %s AND deleted_at IS NULL
+            """,
+            (new_title, chat_id),
+        )
+        conn.commit()
+        logger.info(f"Updated chat title for chat_id {chat_id} to '{new_title}'")
+
+        return {"success": True, "chat_id": chat_id, "new_title": new_title}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error editing chat title: {str(e)}")
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Error editing chat title")
 
 
 serve()

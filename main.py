@@ -1672,8 +1672,9 @@ def note_detail(request: Request, audio_key: str):
                 }
                 .note-actions {
                     display: flex;
-                    align-items: flex-start;
+                    align-items: center;
                     gap: 10px;
+                    justify-content: flex-end;
                 }
 
                 .delete-btn {
@@ -1810,7 +1811,7 @@ def note_detail(request: Request, audio_key: str):
                     font-size: 1.2em;
                     padding: 8px;
                 }
-            """
+                """
             ),
             Script(
                 """
@@ -2534,6 +2535,17 @@ def chat_detail(request: Request, chat_id: str):
             ),
             Style(
                 """
+                body {
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    padding: 20px;
+                    box-sizing: border-box;
+                    background-color: #f5f5f5;
+                }
+
                 .chat-container {
                     width: 90%;
                     font-family: Arial, sans-serif;

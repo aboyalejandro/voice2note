@@ -60,7 +60,6 @@ CREATE TABLE user_1.chats (
     title varchar(255) NOT NULL,
     created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
     deleted_at timestamp NULL,
-    metadata jsonb NULL,
     CONSTRAINT chats_pkey PRIMARY KEY (chat_id)
 );
 CREATE INDEX idx_chats_chat_id ON user_1.chats USING btree (chat_id);

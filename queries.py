@@ -57,7 +57,6 @@ def create_user_schema(user_id: int):
                 title varchar(255) NOT NULL,
                 created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 deleted_at timestamp NULL,
-                metadata jsonb NULL,
                 CONSTRAINT chats_pkey PRIMARY KEY (chat_id)
             )
         """

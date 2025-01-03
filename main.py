@@ -2929,6 +2929,26 @@ def chat_detail(request: Request, chat_id: str):
                     });
                 }
             });
+
+            async function deleteChat() {
+                if (!confirm('Are you sure you want to delete this chat?')) return;
+                
+                try {
+                    const response = await fetch(
+                        `/api/delete-chat/${window.location.pathname.split('_')[1]}`,
+                        { method: 'POST' }
+                    );
+                    
+                    if (response.ok) {
+                        window.location.href = '/notes';
+                    } else {
+                        alert('Failed to delete chat');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Error deleting chat');
+                }
+            }
             """
         ),
         Body(

@@ -53,3 +53,40 @@ CREATE TABLE user_{user_id}.transcripts (
 CREATE INDEX idx_transcripts_audio_id ON user_{user_id}.transcripts USING btree (audio_key);
 CREATE INDEX idx_transcripts_transcript_id ON user_{user_id}.transcripts USING btree (transcript_id);
 ALTER TABLE user_{user_id}.transcripts ADD CONSTRAINT transcripts_audio_key_fkey FOREIGN KEY (audio_key) REFERENCES user_{user_id}.audios(audio_key);
+
+-- Chats Table
+CREATE TABLE user_1.chats (
+    chat_id varchar(255) NOT NULL,
+    title varchar(255) NOT NULL,
+    created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at timestamp NULL,
+    metadata jsonb NULL,
+    CONSTRAINT chats_pkey PRIMARY KEY (chat_id)
+);
+CREATE INDEX idx_chats_chat_id ON user_1.chats USING btree (chat_id);
+
+CREATE TABLE user_1.chat_messages (
+    message_id serial4 NOT NULL,
+    chat_id varchar(255) NOT NULL,
+    role varchar(10) NOT NULL,
+    content text NOT NULL,
+    source_refs jsonb NULL,
+    created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    CONSTRAINT chat_messages_pkey PRIMARY KEY (message_id),
+    CONSTRAINT chat_messages_role_check CHECK (role IN ('user', 'assistant')),
+    CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES user_1.chats(chat_id)
+);
+CREATE INDEX idx_chat_messages_chat_id ON user_1.chat_messages USING btree (chat_id);
+
+-- Vector Storage Table
+CREATE TABLE user_1.note_vectors (
+    vector_id serial4 NOT NULL,
+    audio_key varchar(255) NOT NULL,
+    content_chunk text NOT NULL,
+    embedding jsonb NOT NULL,
+    created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    deleted_at timestamp NULL,
+    CONSTRAINT note_vectors_pkey PRIMARY KEY (vector_id),
+    CONSTRAINT note_vectors_audio_key_fkey FOREIGN KEY (audio_key) REFERENCES user_1.audios(audio_key)
+);
+CREATE INDEX idx_note_vectors_audio_key ON user_1.note_vectors USING btree (audio_key);

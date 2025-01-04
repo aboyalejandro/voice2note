@@ -43,7 +43,7 @@ def get_chat_completion(messages: List[dict], temperature: float = 0.7) -> str:
     """
     try:
         chat_completion = openai.chat.completions.create(
-            model="gpt-4-turbo-preview",
+            model="gpt-4o",
             messages=messages,
             temperature=temperature,
         )

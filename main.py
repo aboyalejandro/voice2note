@@ -218,7 +218,7 @@ async def api_signup(request):
         )
         response.set_cookie(
             key="schema",
-            value=f"{user_id}",
+            value=f"user_{user_id}",
             httponly=True,
             max_age=7 * 24 * 60 * 60,
             secure=True,
@@ -695,123 +695,123 @@ def home(request):
                 ),
                 Style(
                     """
-                    body {
-                        font-family: Arial, sans-serif;
-                        text-align: center;
-                        background-color: white;
-                        color: navy;
-                        padding: 20px;
-                        display: flex;
-                        flex-direction: column;
-                        align-items: center;
-                        justify-content: center;
-                        height: 100vh;
-                        margin: 0;
-                    }
-                    .controls {
-                        margin: 20px 0;
-                    }
+                body {
+                    font-family: Arial, sans-serif;
+                    text-align: center;
+                    background-color: white;
+                    color: navy;
+                    padding: 20px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    margin: 0;
+                }
+                .controls {
+                    margin: 20px 0;
+                }
                     .record-btn, .stop-btn, .upload-btn {
-                        font-size: 40px;
-                        background: none;
-                        border: none;
-                        cursor: pointer;
-                        padding: 10px;
-                        margin: 0 10px;
-                        color: navy;
-                    }
-                    .record-btn:hover {
-                        color: red;
-                    }
+                    font-size: 40px;
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 10px;
+                    margin: 0 10px;
+                    color: navy;
+                }
+                .record-btn:hover {
+                    color: red;
+                }
                     .upload-btn:hover {
                         color: #004080;
                     }
-                    .stop-btn:hover {
-                        color: #ff8000;
-                    }
-                    .stop-btn[disabled] {
-                        color: #ccc;
-                        cursor: not-allowed;
-                    }
-                    .audio-wrapper {
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        align-items: center;
-                        margin-top: 20px;
-                    }
-                    .audio-player {
-                        margin-top: 20px;
-                        width: 100%;
-                        max-width: 400px;
-                        border: 2px solid navy;
-                        border-radius: 10px;
-                        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
-                        background-color: #f9f9f9;
-                    }
-                    .save-container {
-                        margin-top: 20px;
-                    }
-                    .save-btn {
-                        font-size: 16px;
-                        padding: 10px 20px;
-                        background-color: navy;
-                        color: white;
-                        border: none;
-                        border-radius: 5px;
-                        cursor: pointer;
-                    }
-                    .save-btn[disabled] {
-                        background-color: #ccc;
-                        cursor: not-allowed;
-                    }
-                    .save-btn:hover:not([disabled]) {
-                        background-color: #004080;
-                    }
-                    .notes-btn {
-                        font-size: 16px;
-                        padding: 10px 20px;
-                        background-color: navy;
-                        color: white;
-                        border: none;
-                        border-radius: 5px;
-                        cursor: pointer;
-                    }
-                    .notes-btn:hover {
-                        background-color: #004080;
-                    }
-                    .logout-btn {
-                        padding: 8px 16px;
-                        background-color: #dc3545;
-                        color: white;
-                        border: none;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        font-size: 14px;
-                        transition: background-color 0.2s;
-                    }
-                    .logout-btn:hover {
-                        background-color: #c82333;
-                    }
-                    .chat-btn {
-                        font-size: 40px;
-                        background: none;
-                        border: none;
-                        cursor: pointer;
-                        padding: 10px;
-                        margin: 0 10px;
-                        color: navy;
-                    }
-                    .chat-btn:hover {
-                        color: #2196F3;
-                    }
-                    """
+                .stop-btn:hover {
+                    color: #ff8000;
+                }
+                .stop-btn[disabled] {
+                    color: #ccc;
+                    cursor: not-allowed;
+                }
+                .audio-wrapper {
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    margin-top: 20px;
+                }
+                .audio-player {
+                    margin-top: 20px;
+                    width: 100%;
+                    max-width: 400px;
+                    border: 2px solid navy;
+                    border-radius: 10px;
+                    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+                    background-color: #f9f9f9;
+                }
+                .save-container {
+                    margin-top: 20px;
+                }
+                .save-btn {
+                    font-size: 16px;
+                    padding: 10px 20px;
+                    background-color: navy;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                }
+                .save-btn[disabled] {
+                    background-color: #ccc;
+                    cursor: not-allowed;
+                }
+                .save-btn:hover:not([disabled]) {
+                    background-color: #004080;
+                }
+                .notes-btn {
+                    font-size: 16px;
+                    padding: 10px 20px;
+                    background-color: navy;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                }
+                .notes-btn:hover {
+                    background-color: #004080;
+                }
+                .logout-btn {
+                    padding: 8px 16px;
+                    background-color: #dc3545;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: background-color 0.2s;
+                }
+                .logout-btn:hover {
+                    background-color: #c82333;
+                }
+                .chat-btn {
+                    font-size: 40px;
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 10px;
+                    margin: 0 10px;
+                    color: navy;
+                }
+                .chat-btn:hover {
+                    color: #2196F3;
+                }
+                """
                 ),
                 Script(
                     """
                     let mediaRecorder;
                     let audioChunks = [];
-                    let recordingDuration = 0;
+                        let recordingDuration = 0;
                     let recordInterval;
 
                     document.getElementById('upload').addEventListener('click', () => {
@@ -856,7 +856,7 @@ def home(request):
 
                     document.getElementById('start').addEventListener('click', () => {
                         navigator.mediaDevices.getUserMedia({ audio: true })
-                            .then(stream => {
+                        .then(stream => {
                                 const options = {
                                     mimeType: 'audio/webm;codecs=opus',
                                     audioBitsPerSecond: 128000
@@ -865,49 +865,49 @@ def home(request):
                                 mediaRecorder = new MediaRecorder(stream, options);
                                 recordingDuration = 0;
                                 audioChunks = [];
-                                
-                                mediaRecorder.ondataavailable = event => {
-                                    audioChunks.push(event.data);
-                                };
 
-                                mediaRecorder.onstop = () => {
+                            mediaRecorder.ondataavailable = event => {
+                                audioChunks.push(event.data);
+                            };
+
+                            mediaRecorder.onstop = () => {
                                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                                    const audioUrl = URL.createObjectURL(audioBlob);
-                                    const audioPlayback = document.getElementById('audioPlayback');
-                                    audioPlayback.src = audioUrl;
-                                    
-                                    clearInterval(recordInterval);
-                                    document.getElementById('recordTimer').style.display = 'none';
-                                    
-                                    window.audioBlob = audioBlob;
+                                const audioUrl = URL.createObjectURL(audioBlob);
+                                const audioPlayback = document.getElementById('audioPlayback');
+                                audioPlayback.src = audioUrl;
+
+                                clearInterval(recordInterval);
+                                document.getElementById('recordTimer').style.display = 'none';
+
+                                window.audioBlob = audioBlob;
                                     window.audioType = 'recorded';
                                     document.getElementById('save').disabled = false;
-                                };
+                            };
 
                                 mediaRecorder.start(1000);
-                                document.getElementById('start').disabled = true;
-                                document.getElementById('stop').disabled = false;
+                            document.getElementById('start').disabled = true;
+                            document.getElementById('stop').disabled = false;
 
-                                const timerElement = document.getElementById('recordTimer');
-                                timerElement.style.display = 'block';
+                            const timerElement = document.getElementById('recordTimer');
+                            timerElement.style.display = 'block';
                                 
-                                recordInterval = setInterval(() => {
+                            recordInterval = setInterval(() => {
                                     recordingDuration++;
                                     const minutes = Math.floor(recordingDuration / 60);
                                     const displaySeconds = recordingDuration % 60;
-                                    timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
-                                }, 1000);
+                                timerElement.textContent = `Recording: ${minutes}:${displaySeconds < 10 ? '0' : ''}${displaySeconds}`;
+                            }, 1000);
                             })
                             .catch(error => {
                                 console.error('Error accessing microphone:', error);
                                 alert('Error accessing microphone. Please ensure you have given permission.');
-                            });
+                        });
                     });
 
                     document.getElementById('save').addEventListener('click', () => {
                         const audioBlob = window.audioBlob;
-                        const audioType = window.audioType;
-                        const saveButton = document.getElementById('save');
+                            const audioType = window.audioType;
+                            const saveButton = document.getElementById('save');
 
                         if (!audioBlob) {
                             alert('No audio to save!');
@@ -916,40 +916,40 @@ def home(request):
 
                         const formData = new FormData();
                         const timestamp = Math.floor(Date.now() / 1000);
-                        const extension = audioBlob.type.split('/')[1]; // Extract file extension
-                        const filename = `recording_${timestamp}.${extension}`;
+                            const extension = audioBlob.type.split('/')[1]; // Extract file extension
+                            const filename = `recording_${timestamp}.${extension}`;
 
                         formData.append('audio_file', audioBlob, filename);
-                        formData.append('audio_type', audioType);
+                            formData.append('audio_type', audioType);
 
-                        saveButton.textContent = 'Saving...';
-                        saveButton.disabled = true;
+                            saveButton.textContent = 'Saving...';
+                            saveButton.disabled = true;
 
                         fetch('/save-audio', {
                             method: 'POST',
                             body: formData,
-                        })
-                            .then(response => {
-                                if (!response.ok) {
-                                    return response.text().then(text => {
-                                        throw new Error(`Failed to save audio: ${text}`);
-                                    });
-                                }
-                                return response.json();
                             })
-                            .then(data => {
-                                alert('Audio saved successfully!');
-                                window.audioBlob = null;
-                                document.getElementById('audioPlayback').src = '';
-                            })
-                            .catch(error => {
-                                alert(error.message || 'Failed to save audio. Please try again.');
-                            })
-                            .finally(() => {
-                                saveButton.textContent = 'Save Audio';
-                                saveButton.disabled = false;
-                            });
-                    });
+                                .then(response => {
+                                    if (!response.ok) {
+                                        return response.text().then(text => {
+                                            throw new Error(`Failed to save audio: ${text}`);
+                                        });
+                                    }
+                                    return response.json();
+                                })
+                                .then(data => {
+                                    alert('Audio saved successfully!');
+                                    window.audioBlob = null;
+                                    document.getElementById('audioPlayback').src = '';
+                                })
+                                .catch(error => {
+                                    alert(error.message || 'Failed to save audio. Please try again.');
+                                })
+                                .finally(() => {
+                                    saveButton.textContent = 'Save Audio';
+                                    saveButton.disabled = false;
+                                });
+                        });
 
                     function startNewChat() {
                         const sessionId = Math.random().toString(36).substring(7);
@@ -1826,7 +1826,7 @@ def note_detail(request: Request, audio_key: str):
                         setTimeout(() => {
                             document.getElementById('edit-title').focus();
                         }, 50);
-                    } else {
+                        } else {
                         editContainer.style.display = 'none';
                         noteContainer.style.display = 'block';
                     }
@@ -1988,7 +1988,7 @@ def note_detail(request: Request, audio_key: str):
                         }
                     }
                 }
-            """
+                """
             ),
         ),
         Body(
@@ -2108,9 +2108,10 @@ async def save_audio(
             file_extension = mime_to_extension[mime_type]
 
         # Generate keys and paths
+        user_id = schema.replace("user_", "")
         timestamp = int(datetime.now().timestamp())
-        audio_key = f"{schema}_{timestamp}"
-        s3_key = f"user_{schema}/audios/raw/{audio_key}.{file_extension}"
+        audio_key = f"{user_id}_{timestamp}"
+        s3_key = f"{schema}/audios/raw/{audio_key}.{file_extension}"
         s3_url = f"s3://{AWS_S3_BUCKET}/{s3_key}"
 
         logging.info(f"Saving {audio_type} audio file with key: {audio_key}")
@@ -2123,7 +2124,7 @@ async def save_audio(
         """
         query_params = [
             audio_key,
-            schema,
+            user_id,
             s3_url,
             audio_type,
             datetime.now(),

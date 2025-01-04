@@ -8,16 +8,29 @@ Voice2Note is an AI-powered web application that transforms your voice recording
   - Record audio directly in your browser
   - Upload existing audio files (supports MP3, WAV, WebM)
   - Currently supports English and Spanish audios
+  - Automatic audio compression for optimal storage
 
 - **AI-Powered Processing**
   - Automatic speech-to-text transcription
   - Smart note title generation
   - Concise summary creation
+  - Vector embeddings for semantic search
+  - Context-aware chat responses
 
 - **Note Management**
   - Filter notes by date and keywords
   - Edit transcriptions and titles
   - Real-time audio playback
+  - Semantic search across notes and chats
+  - Soft delete with data recovery options
+
+- **Chat Interface**
+  - Context-aware AI responses
+  - Source reference linking
+  - Conversation history
+  - Dynamic title generation
+  - In-place title editing
+  - Chat message loading with pagination
 
 ## How It Works 🔄
 

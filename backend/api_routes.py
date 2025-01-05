@@ -1,3 +1,16 @@
+"""
+API route handlers for Voice2Note.
+
+This module handles all API endpoints including:
+- Authentication (login, signup, password reset)
+- Chat functionality (messages, title editing)
+- Note management (editing, deletion)
+- Audio file handling
+- Session management
+
+Each route handler includes proper error handling and database transaction management.
+"""
+
 from fasthtml.common import *
 from datetime import datetime
 from starlette.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -12,7 +25,7 @@ from backend.llm import LLM, RateLimiter
 import json
 import io
 
-# Initialize shared resources
+# Initialize PostgreSQL
 cursor = conn.cursor()
 
 # Initialize LLM
@@ -25,26 +38,34 @@ styles = Styles()
 
 def setup_api_routes(app):
     """
-    Add API routes to the main application.
-
-    This function takes the main FastHTML app instance and adds all API routes to it.
-    Each route is added using app.route() with appropriate HTTP methods.
+    Configure all API routes for the application.
 
     Args:
-        app: The FastHTML application instance
+        app: The FastAPI application instance
 
     Returns:
-        The app instance with routes added
+        app: The configured application with all routes added
     """
 
     # Authentication Routes
     @app.route("/api/login", methods=["POST"])
     async def api_login(request):
+        """
+        Handle user login requests.
+
+        Validates credentials, creates a new session, and sets cookies.
+
+        Returns:
+            RedirectResponse: Redirect to home on success
+            Html: Error page on failure
+
+        Raises:
+            HTTPException: For invalid credentials or server errors
+        """
         form = await request.form()
         username = form.get("username")
         password = form.get("password")
 
-        # Get user from database
         cursor.execute(
             "SELECT user_id, username, hashed_password FROM users WHERE username = %s",
             (username,),
@@ -315,8 +336,7 @@ def setup_api_routes(app):
         conn.commit()
         logger.info(f"Saved password reset token for user_id {user}...")
 
-        # Pending email recovery
-        reset_link = f"/reset-password/{reset_token}"
+        reset_link = f"/reset-password/{reset_token}"  # TODO: Pending email recovery
 
         return Html(
             Head(
@@ -416,6 +436,23 @@ def setup_api_routes(app):
     # Chat Routes
     @app.route("/api/chat", methods=["POST"])
     async def chat(request: Request):
+        """
+        Handle chat message processing.
+
+        - Validates user authentication and rate limits
+        - Finds relevant context from user's notes
+        - Generates AI response using OpenAI
+        - Manages chat history and title generation
+
+        Args:
+            request (Request): The incoming request containing chat message
+
+        Returns:
+            dict: Contains AI response and reference sources
+
+        Raises:
+            HTTPException: For authentication, rate limit, or processing errors
+        """
         schema = validate_schema(request.cookies.get("schema"))
         if not schema:
             raise HTTPException(status_code=401, detail="Not authenticated")
@@ -431,7 +468,7 @@ def setup_api_routes(app):
             if not message:
                 raise HTTPException(status_code=400, detail="Message is required")
 
-            # First, ensure chat exists or create it
+            # Ensure chat exists or create it
             cursor.execute(
                 f"""
                 INSERT INTO {schema}.chats (chat_id, title)
@@ -497,7 +534,7 @@ def setup_api_routes(app):
                 ),
             )
 
-            # Check if we should generate a title
+            # Check if we should generate a title (at least 3 messages required)
             cursor.execute(
                 f"""
                 SELECT COUNT(*), title FROM {schema}.chat_messages 
@@ -626,6 +663,19 @@ def setup_api_routes(app):
 
     @app.route("/api/edit-chat-title/{chat_id}", methods=["POST"])
     async def edit_chat_title(request: Request, chat_id: str):
+        """
+        Update the title of a chat conversation.
+
+        Args:
+            request (Request): The incoming request
+            chat_id (str): ID of the chat to update
+
+        Returns:
+            dict: Success status and updated chat information
+
+        Raises:
+            HTTPException: For invalid input or database errors
+        """
         schema = validate_schema(request.cookies.get("schema"))
         if not schema:
             raise HTTPException(status_code=401, detail="Not authenticated")
@@ -719,7 +769,21 @@ def setup_api_routes(app):
     # Note Editing Routes
     @app.route("/api/edit-note/{audio_key}", methods=["POST"])
     async def edit_note(request):
-        """Handle note content updates."""
+        """
+        Update note content and title.
+
+        Handles updates to transcription content and note title,
+        maintaining edit history in the transcription JSON.
+
+        Args:
+            request: Request containing note updates
+
+        Returns:
+            JSONResponse: Success status and update timestamp
+
+        Raises:
+            HTTPException: For validation or database errors
+        """
         schema = validate_schema(request.cookies.get("schema"))
         if not schema:
             raise HTTPException(status_code=401, detail="Not authenticated")

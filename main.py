@@ -1,3 +1,21 @@
+"""
+Main application module for Voice2Note.
+
+This module serves as the core of the Voice2Note application, providing:
+- Route definitions for web pages and views
+- HTML template generation using FastHTML
+- Authentication and session management
+- Audio recording and upload functionality
+- Note management and viewing
+- Chat interface and interactions
+
+The application architecture:
+- Frontend: FastHTML for templating
+- Backend: PostgreSQL for data storage
+- Storage: AWS S3 for audio files
+- AI: OpenAI for transcription and chat
+"""
+
 from fasthtml.common import *
 from datetime import datetime
 import json
@@ -10,10 +28,10 @@ from frontend.styles import Styles
 from frontend.scripts import Scripts
 
 
-# Setup PostgreSQL
+# Initialize PostgreSQL
 cursor = conn.cursor()
 
-# Initialize scripts and styles
+# Initialize frontend components
 scripts = Scripts()
 styles = Styles()
 
@@ -21,11 +39,24 @@ styles = Styles()
 app, rt = fast_app()
 app = setup_api_routes(app)
 
-# Auth
+
+# Authentication Routes
 
 
 @rt("/login")
 def login(request: Request):
+    """
+    Render login page.
+
+    Displays login form with username/password fields
+    and links to signup and password reset.
+
+    Args:
+        request (Request): The incoming request
+
+    Returns:
+        Html: Login page template
+    """
     return Html(
         Head(
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
@@ -83,6 +114,18 @@ def login(request: Request):
 
 @rt("/signup")
 def signup(request: Request):
+    """
+    Render signup page.
+
+    Displays registration form for new users with
+    username and password fields.
+
+    Args:
+        request (Request): The incoming request
+
+    Returns:
+        Html: Signup page template
+    """
     return Html(
         Head(
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
@@ -139,6 +182,15 @@ def signup(request: Request):
 
 @rt("/forgot-password")
 def forgot_password():
+    """
+    Render password reset request page.
+
+    Displays form to request password reset by entering username.
+    Reset link will be displayed (email functionality pending).
+
+    Returns:
+        Html: Password reset request page
+    """
     return Html(
         Head(
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
@@ -179,6 +231,17 @@ def forgot_password():
 
 @rt("/reset-password/{token}")
 def reset_password(token: str):
+    """
+    Render password reset page.
+
+    Displays form to set new password after clicking reset link.
+
+    Args:
+        token (str): Password reset token from email
+
+    Returns:
+        Html: Password reset page template
+    """
     return Html(
         Head(
             Meta(name="viewport", content="width=device-width, initial-scale=1.0"),
@@ -213,11 +276,28 @@ def reset_password(token: str):
     )
 
 
-# App
+# Main Application Routes
 
 
 @rt("/")
 def home(request):
+    """
+    Render home page with recording interface.
+
+    Features:
+    - Audio recording controls
+    - File upload option
+    - Audio playback
+    - Save functionality
+    - Navigation to notes
+
+    Args:
+        request (Request): The incoming request
+
+    Returns:
+        Html: Home page template
+        RedirectResponse: To login if not authenticated
+    """
     schema = validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
@@ -281,7 +361,7 @@ def home(request):
                         disabled=True,
                     ),
                     Button(
-                        I(cls="fas fa-robot"),  # Added chat robot icon
+                        I(cls="fas fa-robot"),
                         id="chat",
                         cls="chat-btn",
                         title="Chat with Notes",
@@ -336,6 +416,25 @@ def home(request):
 
 @rt("/notes")
 def notes(request, start_date: str = None, end_date: str = None, keyword: str = None):
+    """
+    Render notes list page with search and filtering.
+
+    Features:
+    - List of audio notes and chats
+    - Date range filtering
+    - Keyword search
+    - Note previews and metadata
+
+    Args:
+        request (Request): The incoming request
+        start_date (str, optional): Filter notes from this date
+        end_date (str, optional): Filter notes until this date
+        keyword (str, optional): Search in titles and content
+
+    Returns:
+        Html: Notes list page template
+        RedirectResponse: To login if not authenticated
+    """
     schema = validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
@@ -374,7 +473,6 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
 
     query += " ORDER BY sort_date DESC"
 
-    # Execute query in user's schema
     cursor.execute(query, query_params)
     items = cursor.fetchall()
     conn.commit()
@@ -447,7 +545,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                         else None
                     ),
                     P(
-                        item[5],  # duration or message count
+                        item[5],  # duration or message count if chat
                         cls=(
                             "note-duration"
                             if item[0] == "note"
@@ -458,7 +556,7 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
                 ),
                 cls="note-header",
             ),
-            P(item[4], cls="note-preview"),  # preview
+            P(item[4], cls="note-preview"),  # summary
             Div(
                 A(
                     Button("View", cls="view-btn"),
@@ -514,6 +612,25 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
 
 @rt("/note_{audio_key}")
 def note_detail(request: Request, audio_key: str):
+    """
+    Render note detail page.
+
+    Features:
+    - Note title and metadata
+    - Audio playback
+    - Transcription display
+    - Edit functionality
+    - Delete option
+
+    Args:
+        request (Request): The incoming request
+        audio_key (str): Unique identifier for the note
+
+    Returns:
+        Html: Note detail page template
+        RedirectResponse: To login if not authenticated
+        HTTPException: If note not found
+    """
     # Get current user_id from session
     schema = validate_schema(request.cookies.get("schema"))
     if not schema:
@@ -556,7 +673,6 @@ def note_detail(request: Request, audio_key: str):
             ),
             Div(
                 A("\u2190", href="/notes", cls="back-button"),
-                # Note display container
                 Div(
                     Div(
                         Div(
@@ -588,7 +704,6 @@ def note_detail(request: Request, audio_key: str):
                     P(note[3], cls="note-transcription"),
                     cls="note-container",
                 ),
-                # Edit form container
                 Div(
                     Form(
                         Input(
@@ -874,6 +989,24 @@ def get_audio(request: Request, audio_key: str):
 
 @rt("/chat_{chat_id}")
 def chat_detail(request: Request, chat_id: str):
+    """
+    Render chat detail page.
+
+    Features:
+    - Chat history display
+    - Message input
+    - Title editing
+    - Delete chat option
+    - Source references
+
+    Args:
+        request (Request): The incoming request
+        chat_id (str): Unique identifier for the chat
+
+    Returns:
+        Html: Chat detail page template
+        RedirectResponse: To login if not authenticated
+    """
     schema = validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)

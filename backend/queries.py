@@ -1,10 +1,44 @@
+"""
+Database operations and schema management for Voice2Note.
+
+This module handles all database-related operations including:
+- Schema creation and validation
+- SQL queries for notes and chats
+- Database connection management
+- Table creation and indexing
+
+The module uses PostgreSQL for data storage and follows a multi-schema
+architecture where each user gets their own schema for isolation.
+"""
+
 from backend.config import conn, logger
 
 cursor = conn.cursor()
 
 
-def create_user_schema(user_id: int):
-    """Creates a new schema and required tables for a user"""
+def create_user_schema(user_id: int) -> bool:
+    """
+    Create a new database schema and required tables for a user.
+
+    Creates a complete set of tables including:
+    - audios: Stores audio file metadata and S3 locations
+    - transcripts: Stores transcriptions and summaries
+    - chats: Stores chat conversations
+    - chat_messages: Stores individual messages in chats
+    - note_vectors: Stores embeddings for semantic search
+
+    Also creates necessary indexes and foreign key constraints
+    for optimal performance and data integrity.
+
+    Args:
+        user_id (int): The ID of the user to create schema for
+
+    Returns:
+        bool: True if schema creation was successful
+
+    Raises:
+        Exception: If any database operation fails
+    """
     logger.info(f"Starting schema creation for user_id: {user_id}")
     try:
         # Create schema
@@ -29,7 +63,7 @@ def create_user_schema(user_id: int):
                 ),
                 CONSTRAINT audios_pkey PRIMARY KEY (audio_id)
             )
-        """
+            """
         )
         logger.info(f"Audios table created for user_{user_id}")
 
@@ -135,13 +169,51 @@ def create_user_schema(user_id: int):
         raise
 
 
-def validate_schema(schema):
+def validate_schema(schema: str) -> str:
+    """
+    Validate that a schema name follows the expected format.
+
+    Schema names must follow the pattern 'user_<number>' where
+    <number> is a valid integer user ID.
+
+    Args:
+        schema (str): Schema name to validate
+
+    Returns:
+        str: The validated schema name
+
+    Raises:
+        ValueError: If schema name doesn't match expected format
+    """
     if not schema.startswith("user_") or not schema.replace("user_", "").isdigit():
         raise ValueError("Invalid schema")
     return schema
 
 
-def get_notes(schema):
+def get_notes(schema: str) -> str:
+    """
+    Generate SQL query to fetch all notes and chats for a user.
+
+    Creates a unified view combining:
+    - Audio notes with their transcriptions and metadata
+    - Chat conversations with message previews
+
+    Results are formatted consistently for display in the notes list,
+    with common fields like title, preview text, and duration/message count.
+
+    Args:
+        schema (str): User's schema name
+
+    Returns:
+        str: SQL query string that returns:
+            - content_type: 'note' or 'chat'
+            - content_id: audio_key or chat_id
+            - created_date: formatted date
+            - title: note title or chat title
+            - preview: transcript summary or first message
+            - duration: audio duration or message count
+            - sort_date: for ordering
+    """
     return f"""
         WITH unified_content AS (
         -- Audio notes
@@ -189,7 +261,26 @@ def get_notes(schema):
     """
 
 
-def get_note_detail(schema):
+def get_note_detail(schema: str) -> str:
+    """
+    Generate SQL query to fetch details of a specific note.
+
+    Retrieves complete note information including:
+    - Audio metadata
+    - Transcription content
+    - Note title
+    - Creation date
+
+    Args:
+        schema (str): User's schema name
+
+    Returns:
+        str: SQL query string that expects an audio_key parameter and returns:
+            - audio_key: Unique identifier
+            - note_date: Formatted creation date
+            - note_title: Title from transcription
+            - note_transcription: Full transcription text
+    """
     return f"""
             SELECT 
                 audios.audio_key,

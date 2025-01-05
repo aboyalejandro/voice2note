@@ -1,6 +1,33 @@
+"""
+Frontend CSS styles for Voice2Note.
+
+This module provides CSS styling for different pages:
+- Common: Shared styles across all pages
+- Home: Recording and upload interface
+- Notes: Note list and search interface
+- Note Detail: Note viewing and editing
+- Chat Detail: Chat interface and messages
+
+Each method returns a CSS string that gets embedded in the corresponding page.
+"""
+
+
 class Styles:
     @staticmethod
-    def common():
+    def common() -> str:
+        """
+        Common CSS styles used across all pages.
+
+        Includes:
+        - Base typography and colors
+        - Form elements styling
+        - Button styles
+        - Layout utilities
+        - Responsive design rules
+
+        Returns:
+            str: Common CSS styles
+        """
         return """
             body {
                 font-family: Arial, sans-serif;
@@ -13,7 +40,6 @@ class Styles:
                 min-height: 100vh;
             }
 
-            /* Update text elements to use Arial */
             .auth-title, .title {
                 font-weight: bold;
             }
@@ -128,7 +154,6 @@ class Styles:
                 text-align: center;
             }
 
-            /* Common responsive adjustments */
             @media (max-width: 768px) {
                 body {
                     padding: 10px;
@@ -140,7 +165,6 @@ class Styles:
                     margin: 10px auto;
                 }
 
-                /* Auth pages responsive styles */
                 .auth-container {
                     width: 95%;
                     padding: 15px;
@@ -161,7 +185,6 @@ class Styles:
                     font-size: 14px;
                 }
 
-                /* Home page responsive styles */
                 .controls {
                     display: flex;
                     flex-wrap: wrap;
@@ -192,7 +215,6 @@ class Styles:
                     max-width: 200px;
                 }
 
-                /* Notes page responsive styles */
                 .note {
                     padding: 12px;
                 }
@@ -248,7 +270,6 @@ class Styles:
                     flex: 1;
                 }
 
-                /* Note detail page responsive styles */
                 .note-transcription {
                     font-size: 14px;
                     line-height: 1.4;
@@ -275,13 +296,11 @@ class Styles:
                     padding: 8px 12px;
                 }
 
-                /* Audio player responsive styles */
                 .audio-player {
                     width: 100%;
                     max-width: none;
                 }
 
-                /* Logout button positioning */
                 .logout-btn {
                     position: fixed;
                     top: 10px;
@@ -290,7 +309,6 @@ class Styles:
                 }
             }
 
-            /* Small phones */
             @media (max-width: 380px) {
                 .auth-title {
                     font-size: 18px;
@@ -310,7 +328,6 @@ class Styles:
                 }
             }
 
-            /* Landscape orientation adjustments */
             @media (max-height: 600px) and (orientation: landscape) {
                 body {
                     height: auto;
@@ -332,7 +349,20 @@ class Styles:
         """
 
     @staticmethod
-    def home():
+    def home() -> str:
+        """
+        CSS styles for the home page.
+
+        Includes:
+        - Recording controls layout
+        - Audio player styling
+        - Button animations
+        - Upload interface
+        - Save container styling
+
+        Returns:
+            str: Home page CSS styles
+        """
         return """
             body {
                 font-family: Arial, sans-serif;
@@ -447,7 +477,20 @@ class Styles:
             """
 
     @staticmethod
-    def notes():
+    def notes() -> str:
+        """
+        CSS styles for the notes list page.
+
+        Includes:
+        - Note card layout
+        - Search form styling
+        - Date picker customization
+        - List container layout
+        - Responsive grid
+
+        Returns:
+            str: Notes page CSS styles
+        """
         return """
             body {
                 font-family: Arial, sans-serif;
@@ -735,7 +778,20 @@ class Styles:
             """
 
     @staticmethod
-    def note_detail():
+    def note_detail() -> str:
+        """
+        CSS styles for the note detail page.
+
+        Includes:
+        - Note content layout
+        - Edit form styling
+        - Action buttons
+        - Audio player integration
+        - Responsive layout
+
+        Returns:
+            str: Note detail page CSS styles
+        """
         return """
             body {
                 font-family: Arial, sans-serif;
@@ -958,7 +1014,21 @@ class Styles:
             """
 
     @staticmethod
-    def chat_detail():
+    def chat_detail() -> str:
+        """
+        CSS styles for the chat detail page.
+
+        Includes:
+        - Chat container layout
+        - Message bubbles styling
+        - Input area design
+        - Header with actions
+        - Loading states
+        - Responsive chat layout
+
+        Returns:
+            str: Chat detail page CSS styles
+        """
         return """
                 body {
                     display: flex;
@@ -999,7 +1069,7 @@ class Styles:
                     align-items: center;
                     font-family: Arial, sans-serif;
                     gap: 10px;
-                    font-size: 1em;  /* Reduced from 1.2em */
+                    font-size: 1em;
                     margin: 0;
                 }
 
@@ -1022,14 +1092,14 @@ class Styles:
                 .chat-title-text {
                     margin: 0;
                     padding: 5px 10px;
-                    font-size: 1.1em;  /* Controlled size for the title text */
-                    font-weight: normal;  /* Remove bold if too heavy */
+                    font-size: 1.1em;  
+                    font-weight: normal;
                 }
 
                 .chat-title h1 {
-                    font-size: 1.1em;  /* Control the h1 size */
+                    font-size: 1.1em;
                     margin: 0;
-                    font-weight: 500;  /* Semi-bold instead of bold */
+                    font-weight: 500;
                 }
 
                 .edit-mode .chat-title-text {
@@ -1155,7 +1225,6 @@ class Styles:
                     font-size: 1.2em;
                 }
 
-                /* Landscape mode */
                 @media (max-height: 600px) and (orientation: landscape) {
                     .chat-container {
                         height: auto;

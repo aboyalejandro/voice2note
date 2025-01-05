@@ -1,6 +1,32 @@
+"""
+Frontend JavaScript code for Voice2Note.
+
+This module provides JavaScript functionality for different pages:
+- Home: Audio recording, uploading, and playback
+- Notes: Search and filtering functionality
+- Note Detail: Note editing and audio playback
+- Chat Detail: Real-time chat interface and message handling
+
+Each method returns a JavaScript string that gets embedded in the corresponding page.
+"""
+
+
 class Scripts:
     @staticmethod
-    def home():
+    def home() -> str:
+        """
+        JavaScript for the home page.
+
+        Handles:
+        - Audio recording with MediaRecorder API
+        - File uploads and validation
+        - Audio playback controls
+        - Timer display during recording
+        - Save and navigation functionality
+
+        Returns:
+            str: JavaScript code for home page
+        """
         return """
                     let mediaRecorder;
                     let audioChunks = [];
@@ -19,12 +45,12 @@ class Scripts:
                             const allowedExtensions = ['wav', 'mp3', 'webm'];
                             const fileExtension = file.name.split('.').pop().toLowerCase();
 
-                            console.log('Detected MIME type:', file.type); // Debug MIME type
-                            console.log('Detected file extension:', fileExtension); // Debug extension
+                            console.log('Detected MIME type:', file.type);
+                            console.log('Detected file extension:', fileExtension);
 
                             if (!allowedExtensions.includes(fileExtension)) {
                                 alert(`Invalid file type (${fileExtension}). Please upload a .wav, .mp3, or .webm file.`);
-                                event.target.value = ''; // Clear the input
+                                event.target.value = '';
                                 return;
                             }
 
@@ -109,7 +135,7 @@ class Scripts:
 
                         const formData = new FormData();
                         const timestamp = Math.floor(Date.now() / 1000);
-                            const extension = audioBlob.type.split('/')[1]; // Extract file extension
+                            const extension = audioBlob.type.split('/')[1];
                             const filename = `recording_${timestamp}.${extension}`;
 
                         formData.append('audio_file', audioBlob, filename);
@@ -151,7 +177,18 @@ class Scripts:
             """
 
     @staticmethod
-    def notes():
+    def notes() -> str:
+        """
+        JavaScript for the notes list page.
+
+        Handles:
+        - Search form submission
+        - Clear search functionality
+        - Date range and keyword filtering
+
+        Returns:
+            str: JavaScript code for notes page
+        """
         return """
                 function clearSearch() {
                     document.querySelector('input[name="start_date"]').value = '';
@@ -168,10 +205,7 @@ class Scripts:
                     .then(response => {
                         if (response.ok) {
                             alert('Note deleted successfully!');
-                            // In /notes endpoint
                             window.location.reload();
-                            // In /note_{audio_key} endpoint
-                            // window.location.href = '/notes';
                         } else {
                             alert('Failed to delete note.');
                         }
@@ -185,7 +219,20 @@ class Scripts:
                 """
 
     @staticmethod
-    def note_detail():
+    def note_detail() -> str:
+        """
+        JavaScript for the note detail page.
+
+        Handles:
+        - Note editing mode toggle
+        - Save note changes
+        - Delete note confirmation
+        - Audio playback controls
+        - Form validation
+
+        Returns:
+            str: JavaScript code for note detail page
+        """
         return """
                 function toggleEditMode(show) {
                     const editContainer = document.querySelector('.edit-container');
@@ -194,7 +241,6 @@ class Scripts:
                     if (show) {
                         noteContainer.style.display = 'none';
                         editContainer.style.display = 'block';
-                        // Focus on title input
                         setTimeout(() => {
                             document.getElementById('edit-title').focus();
                         }, 50);
@@ -226,7 +272,6 @@ class Scripts:
                         });
 
                         if (response.ok) {
-                            // Update the displayed content
                             document.querySelector('.note-title').textContent = title;
                             document.querySelector('.note-transcription').textContent = transcript;
                             toggleEditMode(false);
@@ -239,15 +284,12 @@ class Scripts:
                     }
                 }
 
-                // Add keyboard shortcuts
                 document.addEventListener('keydown', function(e) {
                     const editContainer = document.querySelector('.edit-container');
                     if (editContainer.style.display === 'block') {
-                        // Escape to cancel
                         if (e.key === 'Escape') {
                             toggleEditMode(false);
                         }
-                        // Ctrl/Cmd + Enter to save
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                             const audioKey = window.location.pathname.split('_')[1];
                             saveNote(audioKey);
@@ -286,30 +328,25 @@ class Scripts:
                         try {
                             playBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                             
-                            // Fetch the audio file
                             const response = await fetch(`/get-audio/${audioKey}`);
                             if (!response.ok) throw new Error('Failed to fetch audio');
                             
                             const blob = await response.blob();
                             const audioUrl = URL.createObjectURL(blob);
                             
-                            // Create a new audio element if it doesn't exist
                             if (!audioPlayer) {
                                 audioPlayer = document.createElement('audio');
                                 audioPlayer.id = 'audio-player';
                                 audioPlayer.className = 'audio-player';
-                                // Insert after the play button
                                 playBtn.parentNode.insertBefore(audioPlayer, playBtn.nextSibling);
                             }
                             
-                            // Set source and try to play
                             audioPlayer.src = audioUrl;
                             audioPlayer.style.display = 'block';
                             if (durationDisplay) {
                                 durationDisplay.style.display = 'none';
                             }
                             
-                            // Add error handler
                             audioPlayer.onerror = (e) => {
                                 console.error('Audio playback error:', e);
                                 alert('This audio format might not be supported by your browser.');
@@ -317,7 +354,6 @@ class Scripts:
                                 isPlaying = false;
                             };
                             
-                            // Try playing
                             const playPromise = audioPlayer.play();
                             if (playPromise !== undefined) {
                                 playPromise
@@ -332,7 +368,6 @@ class Scripts:
                                     });
                             }
                             
-                            // Handle audio end
                             audioPlayer.onended = () => {
                                 playBtn.innerHTML = '<i class="fas fa-play"></i>';
                                 audioPlayer.style.display = 'none';
@@ -348,7 +383,6 @@ class Scripts:
                             isPlaying = false;
                         }
                     } else {
-                        // Pause audio
                         if (audioPlayer) {
                             audioPlayer.pause();
                             playBtn.innerHTML = '<i class="fas fa-play"></i>';
@@ -363,9 +397,22 @@ class Scripts:
                 """
 
     @staticmethod
-    def chat_detail():
+    def chat_detail() -> str:
+        """
+        JavaScript for the chat detail page.
+
+        Handles:
+        - Message sending and display
+        - Chat title editing
+        - Message loading (pagination)
+        - Delete chat confirmation
+        - Auto-scroll behavior
+        - Textarea auto-resize
+
+        Returns:
+            str: JavaScript code for chat detail page
+        """
         return """
-            // Add at the top of chat_detail Script
             let messageOffset = 0;
             const messageLimit = 20;
             let isProcessing = false;

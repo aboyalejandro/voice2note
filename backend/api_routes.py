@@ -8,18 +8,16 @@ from datetime import datetime, timedelta
 from frontend.styles import Styles
 from backend.config import conn, logger, s3, AWS_S3_BUCKET
 from backend.queries import validate_schema, create_user_schema
-from backend.llm import (
-    RateLimiter,
-    get_chat_completion,
-    find_relevant_context,
-    generate_chat_title,
-)
+from backend.llm import LLM, RateLimiter
 import json
 import io
 
 # Initialize shared resources
 cursor = conn.cursor()
+
+# Initialize LLM
 rate_limiter = RateLimiter(max_requests=5, window=60)
+llm = LLM()
 
 # Initialize styles
 styles = Styles()
@@ -444,7 +442,7 @@ def setup_api_routes(app):
             )
 
             # Find relevant context from user's notes
-            relevant_chunks = find_relevant_context(schema, cursor, message)
+            relevant_chunks = llm.find_relevant_context(schema, cursor, message)
             context_chunks = []
             source_keys = []
 
@@ -473,7 +471,7 @@ def setup_api_routes(app):
             messages.append({"role": "user", "content": message})
 
             # Get response from OpenAI
-            response = get_chat_completion(messages)
+            response = llm.get_chat_completion(messages)
 
             # Store user message
             cursor.execute(
@@ -525,7 +523,7 @@ def setup_api_routes(app):
                     {"role": m[0], "content": m[1]} for m in cursor.fetchall()
                 ]
 
-                new_title = generate_chat_title(title_messages)
+                new_title = llm.generate_chat_title(title_messages)
 
                 cursor.execute(
                     f"""

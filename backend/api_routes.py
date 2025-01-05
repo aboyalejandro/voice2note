@@ -662,54 +662,6 @@ def setup_api_routes(app):
             logger.error(f"Error fetching messages: {str(e)}")
             raise HTTPException(status_code=500, detail="Error fetching messages")
 
-    @app.route("/api/edit-chat-title/{chat_id}", methods=["POST"])
-    async def edit_chat_title(request: Request, chat_id: str):
-        """
-        Update the title of a chat conversation.
-
-        Args:
-            request (Request): The incoming request
-            chat_id (str): ID of the chat to update
-
-        Returns:
-            dict: Success status and updated chat information
-
-        Raises:
-            HTTPException: For invalid input or database errors
-        """
-        schema = validate_schema(request.cookies.get("schema"))
-        if not schema:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-
-        try:
-            # Get the updated title from the request
-            body = await request.json()
-            new_title = body.get("title")
-
-            if not new_title or new_title.strip() == "":
-                raise HTTPException(status_code=400, detail="Title cannot be empty")
-
-            # Update the chat title
-            cursor.execute(
-                f"""
-                UPDATE {schema}.chats 
-                SET title = %s 
-                WHERE chat_id = %s AND deleted_at IS NULL
-                """,
-                (new_title, chat_id),
-            )
-            conn.commit()
-            logger.info(f"Updated chat title for chat_id {chat_id} to '{new_title}'")
-
-            return {"success": True, "chat_id": chat_id, "new_title": new_title}
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Error editing chat title: {str(e)}")
-            conn.rollback()
-            raise HTTPException(status_code=500, detail="Error editing chat title")
-
     # Audio Routes
     @app.route("/api/get-audio/{audio_key}", methods=["GET"])
     async def get_audio(request):

@@ -17,7 +17,7 @@ def get_transcript(bucket_name: str, object_key: str, s3_client):
 def run_llm(input: str, instruction: str, role: str, client):
     prompt = f"{instruction}:\n\n{input}"
     completion = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": f"{role}"},
             {"role": "user", "content": prompt},

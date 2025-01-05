@@ -1084,11 +1084,6 @@ class Styles:
                     display: none;
                 }
 
-                .chat-title-input:focus {
-                    outline: none;
-                    border-color: white;
-                }
-
                 .chat-title-text {
                     margin: 0;
                     padding: 5px 10px;
@@ -1100,14 +1095,6 @@ class Styles:
                     font-size: 1.1em;
                     margin: 0;
                     font-weight: 500;
-                }
-
-                .edit-mode .chat-title-text {
-                    display: none;
-                }
-
-                .edit-mode .chat-title-input {
-                    display: block;
                 }
 
                 .chat-actions {

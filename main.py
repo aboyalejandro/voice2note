@@ -1069,12 +1069,6 @@ def chat_detail(request: Request, chat_id: str):
                         ),
                         Div(
                             Button(
-                                I(cls="fas fa-pencil-alt"),
-                                cls="action-btn edit-title-btn",
-                                title="Edit chat title",
-                                onclick="toggleTitleEdit(true)",
-                            ),
-                            Button(
                                 I(cls="fas fa-trash"),
                                 cls="action-btn delete-btn",
                                 title="Delete chat",

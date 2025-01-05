@@ -513,20 +513,6 @@ class Scripts:
                 loadingSpinner.style.display = 'inline-block';
             }
 
-            function toggleTitleEdit(show) {
-                const titleContainer = document.querySelector('.chat-title');
-                const titleText = titleContainer.querySelector('.chat-title-text');
-                const titleInput = titleContainer.querySelector('.chat-title-input');
-                
-                if (show) {
-                    titleContainer.classList.add('edit-mode');
-                    titleInput.value = titleText.textContent;
-                    titleInput.focus();
-                } else {
-                    titleContainer.classList.remove('edit-mode');
-                }
-            }
-
             async function saveChatTitle(chatId) {
                 const titleContainer = document.querySelector('.chat-title');
                 const titleInput = titleContainer.querySelector('.chat-title-input');

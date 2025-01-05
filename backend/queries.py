@@ -131,7 +131,7 @@ def create_user_schema(user_id: int):
 
     except Exception as e:
         conn.rollback()
-        logging.error(f"Error creating schema for user_{user_id}: {str(e)}")
+        logger.error(f"Error creating schema for user_{user_id}: {str(e)}")
         raise
 
 

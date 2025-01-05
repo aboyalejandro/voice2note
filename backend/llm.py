@@ -138,7 +138,7 @@ class LLM:
             Exception: If title generation fails
         """
         try:
-            prompt = f"""Based on these chat messages, generate a short, descriptive title without using quotation marks (max 40 chars):
+            prompt = f"""Based on these chat messages, generate a short, descriptive title in the chat messages language and without using quotation marks (max 40 chars):
 
             {' '.join([m['content'] for m in messages[:3]])}
 

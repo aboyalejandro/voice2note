@@ -103,7 +103,7 @@ class DatabaseManager:
         cur.execute(
             f"""
             CREATE TABLE {schema}.audios (
-                audio_id SERIAL PRIMARY KEY,
+                audio_id SERIAL NOT NULL,
                 audio_key varchar(15) NOT NULL,
                 user_id int4 NOT NULL,
                 s3_object_url text NOT NULL,
@@ -123,7 +123,7 @@ class DatabaseManager:
         cur.execute(
             f"""
             CREATE TABLE {schema}.transcripts (
-                transcript_id SERIAL PRIMARY KEY,
+                transcript_id SERIAL NOT NULL,
                 audio_key varchar(255) NOT NULL,
                 s3_object_url text NULL,
                 transcription jsonb NULL,
@@ -149,7 +149,7 @@ class DatabaseManager:
         cur.execute(
             f"""
             CREATE TABLE {schema}.chat_messages (
-                message_id SERIAL PRIMARY KEY,
+                message_id SERIAL NOT NULL,
                 chat_id varchar(255) NOT NULL,
                 role varchar(10) NOT NULL,
                 content text NOT NULL,
@@ -166,7 +166,7 @@ class DatabaseManager:
         cur.execute(
             f"""
             CREATE TABLE {schema}.note_vectors (
-                vector_id SERIAL PRIMARY KEY,
+                vector_id SERIAL NOT NULL,
                 audio_key varchar(255) NOT NULL,
                 content_chunk text NOT NULL,
                 embedding jsonb NOT NULL,
@@ -180,49 +180,78 @@ class DatabaseManager:
         )
 
     def create_user_schema(self, user_id: int) -> bool:
-        """Create new schema and required tables for user"""
+        """Create new schema, tables, and privileges for a user."""
         logger.info(f"Starting schema creation for user_id: {user_id}")
 
         with self.get_connection() as conn:
             conn.autocommit = True
             try:
                 with conn.cursor() as cur:
-                    # Create schema
-                    cur.execute(f"CREATE SCHEMA IF NOT EXISTS user_{user_id}")
+                    schema_name = f"user_{user_id}"
 
-                    # Get user's hashed password
+                    # Step 1: Create schema
+                    cur.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+
+                    # Step 2: Fetch hashed password for the user
                     cur.execute(
                         "SELECT hashed_password FROM public.users WHERE user_id = %s",
                         (user_id,),
                     )
-                    hashed_password = cur.fetchone()[0]
+                    result = cur.fetchone()
+                    if not result or not result[0]:
+                        raise ValueError(
+                            f"No hashed_password found for user_id: {user_id}"
+                        )
 
-                    # Create user and assign role
+                    hashed_password = result[0]
+
+                    # Step 3: Create database user for the schema
                     cur.execute(
-                        f"CREATE USER user_{user_id} WITH PASSWORD %s",
+                        f"CREATE USER {schema_name} WITH PASSWORD %s",
                         (hashed_password,),
                     )
-                    # Grant ownerships
 
+                    # Step 4: Grant role_user_schema to the new user and schema privileges
                     cur.execute(
                         f"""
-                        GRANT role_user_schema TO user_{user_id};
-                        ALTER SCHEMA user_{user_id} OWNER TO user_{user_id};
-                        """
-                    )
-
-                    # Grant privileges
-                    cur.execute(
-                        f"""
-                        GRANT CONNECT ON DATABASE {os.getenv('DB_NAME')} TO user_{user_id};
-                        GRANT USAGE ON SCHEMA user_{user_id} TO user_{user_id};
-                        GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA user_{user_id} TO user_{user_id};
-                        GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA user_{user_id} TO user_{user_id};
+                        GRANT role_user_schema TO {schema_name};
+                        GRANT USAGE ON SCHEMA {schema_name} TO {schema_name};
                     """
                     )
 
-                    # Create tables
-                    self.create_schema_tables(cur, f"user_{user_id}")
+                    # Step 5: Create all required tables in the schema
+                    self.create_schema_tables(cur, schema_name)
+
+                    # Step 6: Grant privileges on existing tables to schema owner
+                    cur.execute(
+                        f"""
+                        GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA {schema_name} TO {schema_name};
+                        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {schema_name} TO {schema_name};
+                    """
+                    )
+
+                    # Step 7: Set up default privileges for future tables
+                    cur.execute(
+                        f"""
+                        ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} 
+                            GRANT SELECT, INSERT, UPDATE ON TABLES TO {schema_name};
+                        ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} 
+                            GRANT USAGE, SELECT ON SEQUENCES TO {schema_name};
+                    """
+                    )
+
+                    # Step 8: Grant Lambda permissions last
+                    cur.execute(
+                        f"""
+                        GRANT USAGE ON SCHEMA {schema_name} TO aws_lambda;
+                        GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA {schema_name} TO aws_lambda;
+                        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {schema_name} TO aws_lambda;
+                        ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} 
+                            GRANT SELECT, INSERT, UPDATE ON TABLES TO aws_lambda;
+                        ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} 
+                            GRANT USAGE, SELECT ON SEQUENCES TO aws_lambda;
+                    """
+                    )
 
                     # Create connection pool for this user
                     self.db_config.create_user_pool(user_id, hashed_password)

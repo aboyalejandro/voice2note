@@ -3,5 +3,6 @@ __pycache___/
 .env
 .sesskey
 plan.md
+plan_.md
 recap.md
 cleanup_s3_paths

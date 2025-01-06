@@ -21,15 +21,15 @@ from datetime import datetime
 import json
 import io
 from starlette.responses import StreamingResponse
-from backend.config import conn, logger, s3, AWS_S3_BUCKET
-from backend.queries import validate_schema, get_notes, get_note_detail
+from backend.config import logger, s3, AWS_S3_BUCKET, db_config
+from backend.database import DatabaseManager
+from backend.queries import get_notes, get_note_detail
 from backend.api_routes import setup_api_routes
 from frontend.styles import Styles
 from frontend.scripts import Scripts
 
-
-# Initialize PostgreSQL
-cursor = conn.cursor()
+# Initialize database manager
+db = DatabaseManager(db_config)
 
 # Initialize frontend components
 scripts = Scripts()
@@ -37,7 +37,7 @@ styles = Styles()
 
 # Initialize FastHTML app
 app, rt = fast_app()
-app = setup_api_routes(app)
+app = setup_api_routes(app, db)
 
 
 # Authentication Routes
@@ -298,7 +298,7 @@ def home(request):
         Html: Home page template
         RedirectResponse: To login if not authenticated
     """
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
     return Html(
@@ -435,47 +435,49 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
         Html: Notes list page template
         RedirectResponse: To login if not authenticated
     """
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Build query based on filters
-    query = get_notes(schema)
-    query_params = []
+    # Use schema connection from pool
+    with db.get_schema_connection(schema) as conn:
+        with conn.cursor() as cur:
+            # Build query based on filters
+            query = get_notes(schema)
+            query_params = []
 
-    # Add date filtering if dates are provided
-    if start_date or end_date:
-        query += " WHERE DATE(sort_date)"
-        if start_date and end_date:
-            query += " BETWEEN %s AND %s"
-            query_params.extend([start_date, end_date])
-        elif start_date:
-            query += " >= %s"
-            query_params.append(start_date)
-        elif end_date:
-            query += " <= %s"
-            query_params.append(end_date)
+            # Add date filtering if dates are provided
+            if start_date or end_date:
+                query += " WHERE DATE(sort_date)"
+                if start_date and end_date:
+                    query += " BETWEEN %s AND %s"
+                    query_params.extend([start_date, end_date])
+                elif start_date:
+                    query += " >= %s"
+                    query_params.append(start_date)
+                elif end_date:
+                    query += " <= %s"
+                    query_params.append(end_date)
 
-    # Add keyword search if provided
-    if keyword:
-        keyword_condition = f"""
-        {' WHERE ' if not (start_date or end_date) else ' AND '}(
-            title ILIKE %s 
-            OR preview ILIKE %s
-            OR content_id IN (
-                SELECT chat_id 
-                FROM {schema}.chat_messages 
-                WHERE content ILIKE %s
-            )
-        )"""
-        query += keyword_condition
-        query_params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
+            # Add keyword search if provided
+            if keyword:
+                keyword_condition = f"""
+                {' WHERE ' if not (start_date or end_date) else ' AND '}(
+                    title ILIKE %s 
+                    OR preview ILIKE %s
+                    OR content_id IN (
+                        SELECT chat_id 
+                        FROM {schema}.chat_messages 
+                        WHERE content ILIKE %s
+                    )
+                )"""
+                query += keyword_condition
+                query_params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
 
-    query += " ORDER BY sort_date DESC"
+            query += " ORDER BY sort_date DESC"
 
-    cursor.execute(query, query_params)
-    items = cursor.fetchall()
-    conn.commit()
+            cur.execute(query, query_params)
+            items = cur.fetchall()
 
     # Create search form with both date and keyword fields
     search_form = Div(
@@ -631,21 +633,23 @@ def note_detail(request: Request, audio_key: str):
         RedirectResponse: To login if not authenticated
         HTTPException: If note not found
     """
-    # Get current user_id from session
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Query note details in user's schema
-    cursor.execute(
-        get_note_detail(schema),
-        (audio_key,),
-    )
-    note = cursor.fetchone()
+    # Use schema connection from pool
+    with db.get_schema_connection(schema) as conn:
+        with conn.cursor() as cur:
+            # Query note details in user's schema
+            cur.execute(
+                get_note_detail(schema),
+                (audio_key,),
+            )
+            note = cur.fetchone()
 
-    # Handle note not found
-    if not note:
-        raise HTTPException(status_code=404, detail="Note not found")
+            # Handle note not found
+            if not note:
+                raise HTTPException(status_code=404, detail="Note not found")
 
     return Html(
         Head(
@@ -749,63 +753,62 @@ def note_detail(request: Request, audio_key: str):
 
 @rt("/delete-note/{audio_key}")
 async def delete_note(request: Request, audio_key: str):
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        # Check if note exists
-        cursor.execute(
-            f"SELECT 1 FROM {schema}.audios WHERE audio_key = %s AND deleted_at IS NULL",
-            (audio_key,),
-        )
+        # Use schema connection from pool
+        with db.get_schema_connection(schema) as conn:
+            with conn.cursor() as cur:
+                # Check if note exists
+                cur.execute(
+                    f"SELECT 1 FROM {schema}.audios WHERE audio_key = %s AND deleted_at IS NULL",
+                    (audio_key,),
+                )
 
-        if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Note not found")
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Note not found")
 
-        # Soft delete audio and transcript
-        cursor.execute(
-            f"""
-            WITH audio_update AS (
-                UPDATE {schema}.audios 
-                SET deleted_at = CURRENT_TIMESTAMP 
-                WHERE audio_key = %s
-            )
-            UPDATE {schema}.transcripts 
-            SET deleted_at = CURRENT_TIMESTAMP 
-            WHERE audio_key = %s
-            """,
-            (audio_key, audio_key),
-        )
+                # Soft delete audio and transcript
+                cur.execute(
+                    f"""
+                    WITH audio_update AS (
+                        UPDATE {schema}.audios 
+                        SET deleted_at = CURRENT_TIMESTAMP 
+                        WHERE audio_key = %s
+                    )
+                    UPDATE {schema}.transcripts 
+                    SET deleted_at = CURRENT_TIMESTAMP 
+                    WHERE audio_key = %s
+                    """,
+                    (audio_key, audio_key),
+                )
 
-        # Delete vector embedding
-        cursor.execute(
-            f"""
-            UPDATE {schema}.note_vectors 
-            SET deleted_at = CURRENT_TIMESTAMP
-            WHERE audio_key = %s
-            """,
-            (audio_key,),
-        )
+                # Delete vector embedding
+                cur.execute(
+                    f"""
+                    UPDATE {schema}.note_vectors 
+                    SET deleted_at = CURRENT_TIMESTAMP
+                    WHERE audio_key = %s
+                    """,
+                    (audio_key,),
+                )
 
-        conn.commit()
-        logger.info(
-            f"Removed audio, transcript and vector embedding for audio_key {audio_key}."
-        )
+                logger.info(
+                    f"Removed audio, transcript and vector embedding for audio_key {audio_key}."
+                )
 
-        return {"success": True}
+                return {"success": True}
 
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Error deleting note: {str(e)}")
-        conn.rollback()
         raise HTTPException(status_code=500, detail="Error deleting note")
 
 
 @rt("/edit-note/{audio_key}", methods=["POST"])
 async def edit_note(request: Request, audio_key: str):
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -816,48 +819,49 @@ async def edit_note(request: Request, audio_key: str):
         transcript_text = body.get("transcript_text")
         current_timestamp = datetime.now().isoformat()
 
-        # Verify note exists and belongs to user
-        cursor.execute(
-            f"SELECT transcription FROM {schema}.transcripts WHERE audio_key = %s",
-            (audio_key,),
-        )
-        result = cursor.fetchone()
-        if not result:
-            raise HTTPException(status_code=404, detail="Note not found")
+        # Use schema connection from pool
+        with db.get_schema_connection(schema) as conn:
+            with conn.cursor() as cur:
+                # Verify note exists and belongs to user
+                cur.execute(
+                    f"SELECT transcription FROM {schema}.transcripts WHERE audio_key = %s",
+                    (audio_key,),
+                )
+                result = cur.fetchone()
+                if not result:
+                    raise HTTPException(status_code=404, detail="Note not found")
 
-        # Get existing transcription or create new one
-        current_transcription = result[0] if result[0] else {}
+                # Get existing transcription or create new one
+                current_transcription = result[0] if result[0] else {}
 
-        # Update the transcription with new values and edited_at timestamp
-        updated_transcription = {
-            **current_transcription,
-            "note_title": note_title,
-            "transcript_text": transcript_text,
-            "edited_at": current_timestamp,
-        }
+                # Update the transcription with new values and edited_at timestamp
+                updated_transcription = {
+                    **current_transcription,
+                    "note_title": note_title,
+                    "transcript_text": transcript_text,
+                    "edited_at": current_timestamp,
+                }
 
-        # Update the entire transcription JSON
-        cursor.execute(
-            f"""
-            UPDATE {schema}.transcripts 
-            SET transcription = %s::jsonb
-            WHERE audio_key = %s
-            """,
-            (json.dumps(updated_transcription), audio_key),
-        )
+                # Update the entire transcription JSON
+                cur.execute(
+                    f"""
+                    UPDATE {schema}.transcripts 
+                    SET transcription = %s::jsonb
+                    WHERE audio_key = %s
+                    """,
+                    (json.dumps(updated_transcription), audio_key),
+                )
 
-        conn.commit()
-        logger.info(f"Updated note content for audio_key {audio_key}")
+                logger.info(f"Updated note content for audio_key {audio_key}")
 
-        return {"success": True, "audio_key": audio_key, "edited_at": current_timestamp}
+                return {
+                    "success": True,
+                    "audio_key": audio_key,
+                    "edited_at": current_timestamp,
+                }
 
-    except HTTPException:
-        raise
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON in request body")
     except Exception as e:
         logger.error(f"Error editing note: {str(e)}")
-        conn.rollback()
         raise HTTPException(status_code=500, detail="Error editing note")
 
 
@@ -870,7 +874,7 @@ async def save_audio(
     audio_file: UploadFile,
     audio_type: str = Form(...),
 ):
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -898,23 +902,25 @@ async def save_audio(
 
         logger.info(f"Saving {audio_type} audio file with key: {audio_key}")
 
-        # Insert record using user schema
-        query = f"""
-            INSERT INTO {schema}.audios (audio_key, user_id, s3_object_url, audio_type, created_at)
-            VALUES (%s, %s, %s, %s, %s) 
-            RETURNING audio_key
-        """
-        query_params = [
-            audio_key,
-            user_id,
-            s3_url,
-            audio_type,
-            datetime.now(),
-        ]
+        # Use schema connection from pool
+        with db.get_schema_connection(schema) as conn:
+            with conn.cursor() as cur:
+                # Insert record using user schema
+                query = f"""
+                    INSERT INTO {schema}.audios (audio_key, user_id, s3_object_url, audio_type, created_at)
+                    VALUES (%s, %s, %s, %s, %s) 
+                    RETURNING audio_key
+                """
+                query_params = [
+                    audio_key,
+                    user_id,
+                    s3_url,
+                    audio_type,
+                    datetime.now(),
+                ]
 
-        cursor.execute(query, query_params)
-        conn.commit()
-        logger.info(f"Database record created for audio_key: {audio_key}")
+                cur.execute(query, query_params)
+                logger.info(f"Database record created for audio_key: {audio_key}")
 
         # Upload to S3
         s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
@@ -924,58 +930,60 @@ async def save_audio(
 
     except Exception as e:
         logger.error(f"Error saving audio: {str(e)}")
-        conn.rollback()
         raise HTTPException(status_code=500, detail="Error saving audio")
 
 
 @rt("/get-audio/{audio_key}")
 def get_audio(request: Request, audio_key: str):
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        # Get audio URL directly from s3_object_url
-        cursor.execute(
-            f"""
-            SELECT metadata->>'s3_compressed_audio_url'
-            FROM {schema}.audios 
-            WHERE audio_key = %s AND deleted_at IS NULL
-            """,
-            (audio_key,),
-        )
-        result = cursor.fetchone()
+        # Use schema connection from pool
+        with db.get_schema_connection(schema) as conn:
+            with conn.cursor() as cur:
+                # Get audio URL directly from s3_object_url
+                cur.execute(
+                    f"""
+                    SELECT metadata->>'s3_compressed_audio_url'
+                    FROM {schema}.audios 
+                    WHERE audio_key = %s AND deleted_at IS NULL
+                    """,
+                    (audio_key,),
+                )
+                result = cur.fetchone()
 
-        if not result:
-            raise HTTPException(status_code=404, detail="Audio not found")
+                if not result:
+                    raise HTTPException(status_code=404, detail="Audio not found")
 
-        s3_url = result[0]
+                s3_url = result[0]
 
-        # Extract S3 key from s3:// URI
-        if not s3_url.startswith("s3://"):
-            raise ValueError("Invalid S3 URI format")
+                # Extract S3 key from s3:// URI
+                if not s3_url.startswith("s3://"):
+                    raise ValueError("Invalid S3 URI format")
 
-        s3_key = s3_url.replace("s3://" + AWS_S3_BUCKET + "/", "")
-        logger.info(f"Fetching audio from S3 with key: {s3_key}")
+                s3_key = s3_url.replace("s3://" + AWS_S3_BUCKET + "/", "")
+                logger.info(f"Fetching audio from S3 with key: {s3_key}")
 
-        try:
-            response = s3.get_object(Bucket=AWS_S3_BUCKET, Key=s3_key)
-            audio_data = response["Body"].read()
+                try:
+                    response = s3.get_object(Bucket=AWS_S3_BUCKET, Key=s3_key)
+                    audio_data = response["Body"].read()
 
-            return StreamingResponse(
-                io.BytesIO(audio_data),
-                media_type="audio/webm",
-                headers={
-                    "Accept-Ranges": "bytes",
-                },
-            )
-        except Exception as e:
-            logger.error(
-                f"Error fetching from S3 - Bucket: {AWS_S3_BUCKET}, Key: {s3_key}"
-            )
-            raise HTTPException(
-                status_code=500, detail=f"Error fetching audio: {str(e)}"
-            )
+                    return StreamingResponse(
+                        io.BytesIO(audio_data),
+                        media_type="audio/webm",
+                        headers={
+                            "Accept-Ranges": "bytes",
+                        },
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error fetching from S3 - Bucket: {AWS_S3_BUCKET}, Key: {s3_key}"
+                    )
+                    raise HTTPException(
+                        status_code=500, detail=f"Error fetching audio: {str(e)}"
+                    )
 
     except ValueError as e:
         logger.error(f"Invalid S3 URI format: {str(e)}")
@@ -1008,37 +1016,40 @@ def chat_detail(request: Request, chat_id: str):
         Html: Chat detail page template
         RedirectResponse: To login if not authenticated
     """
-    schema = validate_schema(request.cookies.get("schema"))
+    schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Get chat details and messages
-    cursor.execute(
-        f"""
-        SELECT chat_id, title, created_at 
-        FROM {schema}.chats 
-        WHERE chat_id = %s AND deleted_at IS NULL
-        """,
-        (chat_id,),
-    )
-    chat = cursor.fetchone()
+    # Use schema connection from pool
+    with db.get_schema_connection(schema) as conn:
+        with conn.cursor() as cur:
+            # Get chat details
+            cur.execute(
+                f"""
+                SELECT chat_id, title, created_at 
+                FROM {schema}.chats 
+                WHERE chat_id = %s AND deleted_at IS NULL
+                """,
+                (chat_id,),
+            )
+            chat = cur.fetchone()
 
-    messages = []
-    if chat:
-        cursor.execute(
-            f"""
-            SELECT 
-                role, 
-                content, 
-                source_refs,
-                TO_CHAR(created_at, 'HH24:MI') as time
-            FROM {schema}.chat_messages 
-            WHERE chat_id = %s 
-            ORDER BY created_at ASC
-            """,
-            (chat_id,),
-        )
-        messages = cursor.fetchall()
+            messages = []
+            if chat:
+                cur.execute(
+                    f"""
+                    SELECT 
+                        role, 
+                        content, 
+                        source_refs,
+                        TO_CHAR(created_at, 'HH24:MI') as time
+                    FROM {schema}.chat_messages 
+                    WHERE chat_id = %s 
+                    ORDER BY created_at ASC
+                    """,
+                    (chat_id,),
+                )
+                messages = cur.fetchall()
 
     return Html(
         Head(

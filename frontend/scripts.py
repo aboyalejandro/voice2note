@@ -513,39 +513,6 @@ class Scripts:
                 loadingSpinner.style.display = 'inline-block';
             }
 
-            async function saveChatTitle(chatId) {
-                const titleContainer = document.querySelector('.chat-title');
-                const titleInput = titleContainer.querySelector('.chat-title-input');
-                const titleText = titleContainer.querySelector('.chat-title-text');
-                const newTitle = titleInput.value.trim();
-
-                if (!newTitle) {
-                    alert("Title cannot be empty");
-                    return;
-                }
-
-                try {
-                    const response = await fetch(`/api/edit-chat-title/${chatId}`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ title: newTitle }),
-                    });
-
-                    if (!response.ok) {
-                        throw new Error("Failed to update chat title");
-                    }
-
-                    const data = await response.json();
-                    titleText.textContent = data.new_title;
-                    toggleTitleEdit(false);
-                } catch (error) {
-                    console.error("Error updating chat title:", error);
-                    alert("Failed to update chat title");
-                }
-            }
-
             // Event listeners
             document.addEventListener('DOMContentLoaded', () => {
                 const input = document.querySelector('.message-input');
@@ -564,18 +531,6 @@ class Scripts:
                     }
                 });
 
-                const titleInput = document.querySelector('.chat-title-input');
-                if (titleInput) {
-                    titleInput.addEventListener('keydown', (e) => {
-                        const chatId = window.location.pathname.split('_')[1];
-                        if (e.key === 'Enter') {
-                            e.preventDefault();
-                            saveChatTitle(chatId);
-                        } else if (e.key === 'Escape') {
-                            toggleTitleEdit(false);
-                        }
-                    });
-                }
             });
 
             async function deleteChat() {

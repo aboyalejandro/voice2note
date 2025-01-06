@@ -795,6 +795,8 @@ async def delete_note(request: Request, audio_key: str):
                     (audio_key,),
                 )
 
+                conn.commit()
+
                 logger.info(
                     f"Removed audio, transcript and vector embedding for audio_key {audio_key}."
                 )
@@ -921,6 +923,7 @@ async def save_audio(
 
                 cur.execute(query, query_params)
                 logger.info(f"Database record created for audio_key: {audio_key}")
+                conn.commit()
 
         # Upload to S3
         s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)

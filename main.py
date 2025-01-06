@@ -781,7 +781,8 @@ async def delete_note(request: Request, audio_key: str):
         # Delete vector embedding
         cursor.execute(
             f"""
-            DELETE FROM {schema}.note_vectors 
+            UPDATE {schema}.note_vectors 
+            SET deleted_at = CURRENT_TIMESTAMP
             WHERE audio_key = %s
             """,
             (audio_key,),

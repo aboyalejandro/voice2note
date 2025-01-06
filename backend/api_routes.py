@@ -164,7 +164,6 @@ def setup_api_routes(app, db):
                         password.encode("utf-8"), bcrypt.gensalt()
                     )
 
-                    # Create user
                     cur.execute(
                         """
                         INSERT INTO users (username, hashed_password, created_at)
@@ -174,6 +173,7 @@ def setup_api_routes(app, db):
                         (username, hashed_password.decode("utf-8")),
                     )
                     user_id = cur.fetchone()[0]
+                    conn.commit()
 
                     # Create schema
                     db.create_user_schema(user_id)
@@ -219,7 +219,7 @@ def setup_api_routes(app, db):
         form = await request.form()
         username = form.get("username")
 
-        with db.get_connection() as conn:
+        with db.get_connection() as conn:  # App Pool
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT user_id FROM users WHERE username = %s", (username,)
@@ -403,7 +403,30 @@ def setup_api_routes(app, db):
                             context_chunks.append(chunk[0])
                             source_keys.append(chunk[1])
 
-                    # [Rest of the chat logic with messages, etc.]
+                    # Construct messages for GPT
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": """You are Voice2Note's AI assistant, helping users understand their transcribed voice notes.
+                            Provide clear, concise responses and when referencing information, mention only once and at the end of the message which note it comes from in this format: (Note 1). 
+                            Only do the latter if asked something about a note.
+                            Use titles, split paragraphs and bullet points to make the response more readable.
+                            Avoid verbosity and output the responses in a reading friendly format. Treat the user as 'You', since all 
+                            the questions will be about their notes.
+                            Answer in the same language as the user's notes.""",
+                        }
+                    ]
+
+                    if context_chunks:
+                        context_message = "Here are relevant parts of your notes:\n\n"
+                        for idx, chunk in enumerate(context_chunks):
+                            context_message += f"Note {idx + 1}:\n{chunk}\n\n"
+                        messages.append({"role": "system", "content": context_message})
+
+                    messages.append({"role": "user", "content": message})
+
+                    # Get response from OpenAI
+                    response = llm.get_chat_completion(messages)
 
                     # Store user message
                     cur.execute(
@@ -430,6 +453,45 @@ def setup_api_routes(app, db):
                             ),
                         ),
                     )
+
+                    # Check if we should generate a title (at least 3 messages required)
+                    cur.execute(
+                        f"""
+                        SELECT COUNT(*), title FROM {schema}.chat_messages 
+                        JOIN {schema}.chats ON chat_messages.chat_id = chats.chat_id
+                        WHERE chat_messages.chat_id = %s
+                        GROUP BY title
+                        """,
+                        (chat_id,),
+                    )
+                    result = cur.fetchone()
+
+                    if result and result[0] >= 3 and result[1] == "New Chat":
+                        # Get recent messages for title generation
+                        cur.execute(
+                            f"""
+                            SELECT role, content 
+                            FROM {schema}.chat_messages 
+                            WHERE chat_id = %s 
+                            ORDER BY created_at ASC 
+                            LIMIT 3
+                            """,
+                            (chat_id,),
+                        )
+                        title_messages = [
+                            {"role": m[0], "content": m[1]} for m in cur.fetchall()
+                        ]
+
+                        new_title = llm.generate_chat_title(title_messages)
+
+                        cur.execute(
+                            f"""
+                            UPDATE {schema}.chats 
+                            SET title = %s 
+                            WHERE chat_id = %s
+                            """,
+                            (new_title, chat_id),
+                        )
 
                     conn.commit()
 

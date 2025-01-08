@@ -30,9 +30,9 @@ DB_PORT = os.getenv("DB_PORT")
 # PROMPTS
 gpt_rol = "You are a voice note summarizing assistant."
 gpt_prompt_summary = """
-    You are a voice note summarizing assistant that provides titles of no more than 5 words.
-    First, detect the language of the input text and ensure the output is in the same language.
-    Do not use quotation marks in the response. Here's your text:
+    You are a voice note summarizing assistant that provides summaries of no more than 2 sentences.
+    The summary must address the user directly (e.g., "You are planning a holiday...").
+    Ensure the output is in the same language as the text input. Here's your text:
     """
 gpt_prompt_title = """
     You are a voice note summarizing assistant that provides titles of no more than 5 words.

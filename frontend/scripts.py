@@ -144,7 +144,7 @@ class Scripts:
                             saveButton.textContent = 'Saving...';
                             saveButton.disabled = true;
 
-                        fetch('/save-audio', {
+                        fetch('/api/save-audio', {
                             method: 'POST',
                             body: formData,
                             })
@@ -260,7 +260,7 @@ class Scripts:
                     }
 
                     try {
-                        const response = await fetch(`/edit-note/${audioKey}`, {
+                        const response = await fetch(`/api/edit-note/${audioKey}`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -299,7 +299,7 @@ class Scripts:
 
                 function deleteNote(audioKey) {
                     if (confirm('Are you sure you want to delete this note?')) {
-                        fetch(`/delete-note/${audioKey}`, {
+                        fetch(`/api/delete-note/${audioKey}`, {
                             method: 'POST'
                         })
                         .then(response => {

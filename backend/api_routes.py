@@ -629,6 +629,72 @@ def setup_api_routes(app, db):
             logger.error(f"Error in get_audio: {str(e)}")
             raise HTTPException(status_code=500, detail="Server error")
 
+    @app.route("/api/save-audio", methods=["POST"])
+    async def save_audio(
+        request: Request,
+        audio_file: UploadFile,
+        audio_type: str = Form(...),
+    ):
+        schema = db.validate_schema(request.cookies.get("schema"))
+        if not schema:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        try:
+            # Determine the file extension
+            mime_type = audio_file.content_type
+            file_extension = audio_file.filename.split(".")[-1].lower()
+
+            # Map MIME types to correct file extensions
+            mime_to_extension = {
+                "audio/mpeg": "mp3",
+                "audio/wav": "wav",
+                "audio/webm": "webm",
+            }
+
+            if mime_type in mime_to_extension:
+                file_extension = mime_to_extension[mime_type]
+
+            # Generate keys and paths
+            user_id = schema.replace("user_", "")
+            timestamp = int(datetime.now().timestamp())
+            audio_key = f"{user_id}_{timestamp}"
+            s3_key = f"{schema}/audios/raw/{audio_key}.{file_extension}"
+            s3_url = f"s3://{AWS_S3_BUCKET}/{s3_key}"
+
+            logger.info(f"Saving {audio_type} audio file with key: {audio_key}")
+
+            # Use schema connection from pool
+            with db.get_schema_connection(schema) as conn:
+                with conn.cursor() as cur:
+                    # Insert record using user schema
+                    query = f"""
+                        INSERT INTO {schema}.audios (audio_key, user_id, s3_object_url, audio_type, created_at)
+                        VALUES (%s, %s, %s, %s, %s) 
+                        RETURNING audio_key
+                    """
+                    query_params = [
+                        audio_key,
+                        user_id,
+                        s3_url,
+                        audio_type,
+                        datetime.now(),
+                    ]
+
+                    cur.execute(query, query_params)
+                    logger.info(f"Database record created for audio_key: {audio_key}")
+                    conn.commit()
+
+            # Upload to S3
+            s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
+            logger.info(f"Audio file uploaded to S3: {s3_key}")
+
+            return {"audio_key": audio_key}
+
+        except Exception as e:
+            logger.error(f"Error saving audio: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error saving audio")
+
+    # Notes Routes
     @app.route("/api/edit-note/{audio_key}", methods=["POST"])
     async def edit_note(request):
         schema = db.validate_schema(request.cookies.get("schema"))
@@ -697,5 +763,61 @@ def setup_api_routes(app, db):
         except Exception as e:
             logger.error(f"Error editing note: {str(e)}")
             raise HTTPException(status_code=500, detail="Error editing note")
+
+    @app.route("/api/delete-note/{audio_key}", methods=["POST"])
+    async def delete_note(request: Request, audio_key: str):
+        schema = db.validate_schema(request.cookies.get("schema"))
+        if not schema:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
+        try:
+            # Use schema connection from pool
+            with db.get_schema_connection(schema) as conn:
+                with conn.cursor() as cur:
+                    # Check if note exists
+                    cur.execute(
+                        f"SELECT 1 FROM {schema}.audios WHERE audio_key = %s AND deleted_at IS NULL",
+                        (audio_key,),
+                    )
+
+                    if not cur.fetchone():
+                        raise HTTPException(status_code=404, detail="Note not found")
+
+                    # Soft delete audio and transcript
+                    cur.execute(
+                        f"""
+                        WITH audio_update AS (
+                            UPDATE {schema}.audios 
+                            SET deleted_at = CURRENT_TIMESTAMP 
+                            WHERE audio_key = %s
+                        )
+                        UPDATE {schema}.transcripts 
+                        SET deleted_at = CURRENT_TIMESTAMP 
+                        WHERE audio_key = %s
+                        """,
+                        (audio_key, audio_key),
+                    )
+
+                    # Delete vector embedding
+                    cur.execute(
+                        f"""
+                        UPDATE {schema}.note_vectors 
+                        SET deleted_at = CURRENT_TIMESTAMP
+                        WHERE audio_key = %s
+                        """,
+                        (audio_key,),
+                    )
+
+                    conn.commit()
+
+                    logger.info(
+                        f"Removed audio, transcript and vector embedding for audio_key {audio_key}."
+                    )
+
+                    return {"success": True}
+
+        except Exception as e:
+            logger.error(f"Error deleting note: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error deleting note")
 
     return app

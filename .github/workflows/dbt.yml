@@ -1,0 +1,49 @@
+name: DBT Daily Run
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # Runs at 1 AM UTC daily
+  workflow_dispatch:  # Allows manual trigger
+
+env:
+  DBT_PROFILES_DIR: ./dbt
+  POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+  POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+  POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+  POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+  POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+
+jobs:
+  dbt-run:
+    name: Run DBT Transformations
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dbt-postgres
+          if [ -f dbt/requirements.txt ]; then pip install -r dbt/requirements.txt; fi
+
+      - name: Run dbt deps
+        working-directory: ./dbt
+        run: dbt deps
+
+      - name: Run dbt build
+        working-directory: ./dbt
+        run: dbt build
+
+      - name: Handle Failure
+        if: failure()
+        run: |
+          echo "DBT run failed. Check the logs for details."
+          exit 1 

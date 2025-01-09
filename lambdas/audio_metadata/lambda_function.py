@@ -8,6 +8,7 @@ from utils import (
     get_audio_metadata,
     save_to_postgresql,
     reencode_webm,
+    save_metadata_to_s3,
 )
 
 # Setup logging
@@ -112,6 +113,12 @@ def lambda_handler(event, context):
             DB_PORT,
         )
 
+        # Save metadata JSON to S3
+        metadata_s3_key = f"user_{user_id}/audios/metadata/{audio_key}.json"
+        save_metadata_to_s3(
+            f"user_{user_id}", complete_metadata, bucket_name, metadata_s3_key
+        )
+
         return {
             "statusCode": 200,
             "body": json.dumps(
@@ -123,6 +130,7 @@ def lambda_handler(event, context):
                         "audio_key": audio_key,
                         "original_path": object_key,
                         "compressed_path": compressed_key,
+                        "metadata_path": metadata_s3_key,
                         "metadata": complete_metadata,
                     },
                 }

@@ -109,6 +109,17 @@ def get_audio_metadata(input_file, ffmpeg_path):
         raise
 
 
+def save_metadata_to_s3(schema, metadata, bucket_name, key):
+    """Uploads metadata JSON to S3."""
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=key,
+        Body=json.dumps(metadata),
+        ContentType="application/json",
+    )
+    logger.info(f"Uploaded to S3: s3://{bucket_name}/{key}")
+
+
 def save_to_postgresql(user_id, audio_key, metadata, user, password, db, host, port):
     """
     Save combined metadata (audio metadata + s3 url) to PostgreSQL.

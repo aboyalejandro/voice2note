@@ -222,7 +222,18 @@ class DatabaseManager:
                     # Step 5: Create all required tables in the schema
                     self.create_schema_tables(cur, schema_name)
 
-                    # Step 6: Grant privileges on existing tables to schema owner
+                    # Step 6: Set replica identity for CDC tracking
+                    cur.execute(
+                        f"""
+                        ALTER TABLE {schema_name}.audios REPLICA IDENTITY DEFAULT;
+                        ALTER TABLE {schema_name}.transcripts REPLICA IDENTITY DEFAULT;
+                        ALTER TABLE {schema_name}.chats REPLICA IDENTITY DEFAULT;
+                        ALTER TABLE {schema_name}.chat_messages REPLICA IDENTITY DEFAULT;
+                        ALTER TABLE {schema_name}.note_vectors REPLICA IDENTITY DEFAULT;
+                        """
+                    )
+
+                    # Step 7: Grant privileges on existing tables to schema owner
                     cur.execute(
                         f"""
                         GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA {schema_name} TO {schema_name};
@@ -230,7 +241,7 @@ class DatabaseManager:
                     """
                     )
 
-                    # Step 7: Set up default privileges for future tables
+                    # Step 8: Set up default privileges for future tables
                     cur.execute(
                         f"""
                         ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} 
@@ -240,7 +251,7 @@ class DatabaseManager:
                     """
                     )
 
-                    # Step 8: Grant Lambda permissions last
+                    # Step 9: Grant Lambda permissions last
                     cur.execute(
                         f"""
                         GRANT USAGE ON SCHEMA {schema_name} TO aws_lambda;

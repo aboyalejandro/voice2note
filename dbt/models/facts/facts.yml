@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: fct_chat_messages
+    description: "Fact table for chat conversations and messages"
+    columns:
+      - name: chat_id
+        description: "Unique identifier for chat session"
+        tests:
+          - not_null
+      - name: title
+        description: "AI-generated chat title"
+        tests:
+          - not_null
+      - name: role
+        description: "Message sender role (user/assistant)"
+        tests:
+          - accepted_values:
+              values: ['user', 'assistant']
+      - name: content
+        description: "Message content text"
+        tests:
+          - not_null
+      - name: chat_note_sources
+        description: "Array of audio_keys referenced in assistant responses"
+      - name: created_at
+        description: "Timestamp when chat was created"
+        tests:
+          - not_null
+
+  - name: fct_notes
+    description: "Fact table combining audio metadata with transcriptions"
+    columns:
+      - name: audio_key
+        description: "Unique identifier for the note"
+        tests:
+          - unique
+          - not_null
+      - name: audio_type
+        description: "Type of audio (recorded/uploaded)"
+        tests:
+          - accepted_values:
+              values: ['recorded', 'uploaded']
+      - name: audio_size
+        description: "Size of audio file in megabytes (MB)"
+      - name: audio_duration
+        description: "Duration of audio in minutes"
+      - name: audio_format
+        description: "Audio file format (mp3, wav, webm)"
+      - name: audio_conversion_status
+        description: "Status of audio compression process"
+      - name: note_title
+        description: "AI-generated title for the note"
+      - name: note_summary
+        description: "AI-generated summary of the transcript"
+      - name: note_transcript
+        description: "Full text transcription of the audio"
+      - name: created_at
+        description: "Timestamp when transcript was created"
+        tests:
+          - not_null

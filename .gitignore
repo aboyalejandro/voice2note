@@ -6,3 +6,8 @@ plan.md
 plan_.md
 recap.md
 cleanup_s3_paths
+/dbt/profiles.yml
+/dbt/target/
+/dbt/logs/
+/dbt/user.yml
+/dbt/package-lock.yml

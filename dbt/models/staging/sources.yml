@@ -1,0 +1,59 @@
+version: 2
+
+sources: 
+  - name: public
+    description: "Public schema containing user authentication and session management tables"
+    schema: public
+    tables:
+      - name: users
+        description: "User accounts and authentication information"
+        columns:
+          - name: user_id
+            description: "Primary key, auto-incrementing user identifier"
+            tests:
+              - unique
+              - not_null
+          - name: username
+            description: "Unique username for login"
+            tests:
+              - unique
+              - not_null
+          - name: hashed_password
+            description: "Bcrypt hashed password"
+            tests:
+              - not_null
+          - name: created_at
+            description: "Timestamp when user account was created"
+            tests:
+              - not_null
+          - name: reset_token
+            description: "Token for password reset functionality"
+          - name: reset_token_expires
+            description: "Expiration timestamp for password reset token"
+
+      - name: sessions
+        description: "User login sessions with expiration tracking"
+        columns:
+          - name: session_id
+            description: "Primary key, UUID for session"
+            tests:
+              - unique
+              - not_null
+          - name: user_id
+            description: "Foreign key to users table"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('public', 'users')
+                  field: user_id
+          - name: created_at
+            description: "Timestamp when session was created"
+            tests:
+              - not_null
+          - name: expires_at
+            description: "Timestamp when session expires"
+            tests:
+              - not_null
+          - name: deleted_at
+            description: "Soft delete timestamp for ended sessions"
+  

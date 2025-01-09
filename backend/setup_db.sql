@@ -5,11 +5,13 @@ CREATE ROLE role_user_schema;
 CREATE USER app WITH PASSWORD '...';
 CREATE USER aws_lambda WITH PASSWORD '...';
 CREATE USER airbyte WITH PASSWORD '...';
+CREATE USER dbt_analytics WITH PASSWORD '...';
 
 -- Database level permissions
 GRANT CONNECT ON DATABASE voice2note TO app;
 GRANT CREATE ON DATABASE voice2note TO app;
 GRANT CONNECT ON DATABASE voice2note TO aws_lambda;
+GRANT CONNECT ON DATABASE voice2note TO dbt_analytics;
 
 -- Public schema permissions for app user
 GRANT USAGE, CREATE ON SCHEMA public TO app;
@@ -32,5 +34,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE role_user_schema IN SCHEMA public GRANT USAGE,
 
 -- Setup CDC with Airbyte 
 ALTER USER airbyte REPLICATION;
-SHOW wal_level; --changed in CloudClusters UI
 SELECT pg_create_logical_replication_slot('airbyte_slot', 'pgoutput');
+CREATE PUBLICATION airbyte_publication FOR ALL TABLES;
+GRANT USAGE ON SCHEMA analytics TO airbyte;
+GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO airbyte;
+ALTER DEFAULT PRIVILEGES IN SCHEMA analytics GRANT SELECT ON TABLES TO airbyte;
+
+-- Setup dbt_analytics user
+GRANT CONNECT ON DATABASE voice2note TO dbt_analytics;
+GRANT USAGE  public TO dbt_analytics;

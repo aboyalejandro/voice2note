@@ -1,0 +1,174 @@
+version: 2
+
+models:
+  - name: stg_audios_agg
+    description: "Aggregated audio recordings from all user schemas"
+    columns:
+      - name: audio_id
+        description: "Primary key for audio records"
+        tests:
+          - not_null
+      - name: audio_key
+        description: "Unique identifier for audio file"
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "ID of user who created the audio"
+        tests:
+          - not_null
+      - name: s3_object_url
+        description: "S3 URL where audio file is stored"
+      - name: audio_type
+        description: "Type of audio (recorded/uploaded)"
+        tests:
+          - accepted_values:
+              values: ['recorded', 'uploaded']
+      - name: created_at
+        description: "Timestamp when audio was created"
+      - name: deleted_at
+        description: "Soft delete timestamp"
+      - name: metadata
+        description: "JSON metadata including duration and processing info"
+
+  - name: stg_transcripts_agg
+    description: "Aggregated transcriptions from all user schemas"
+    columns:
+      - name: transcript_id
+        description: "Primary key for transcripts"
+        tests:
+          - not_null
+      - name: audio_key
+        description: "Foreign key to audios table"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_audios_agg')
+              field: audio_key
+      - name: s3_object_url
+        description: "S3 URL of transcript file if stored separately"
+      - name: transcription
+        description: "JSON containing transcript text, title and summary"
+      - name: created_at
+        description: "Timestamp when transcript was created"
+      - name: deleted_at
+        description: "Soft delete timestamp"
+
+  - name: stg_chats_agg
+    description: "Aggregated chat sessions from all user schemas"
+    columns:
+      - name: chat_id
+        description: "Primary key for chat sessions"
+        tests:
+          - unique
+          - not_null
+      - name: title
+        description: "AI-generated chat title"
+        tests:
+          - not_null
+      - name: created_at
+        description: "Timestamp when chat was created"
+      - name: deleted_at
+        description: "Soft delete timestamp"
+
+  - name: stg_chat_messages_agg
+    description: "Aggregated chat messages from all user schemas"
+    columns:
+      - name: message_id
+        description: "Primary key for chat messages"
+        tests:
+          - unique
+          - not_null
+      - name: chat_id
+        description: "Foreign key to chats table"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_chats_agg')
+              field: chat_id
+      - name: role
+        description: "Message sender role (user/assistant)"
+        tests:
+          - accepted_values:
+              values: ['user', 'assistant']
+      - name: content
+        description: "Message content text"
+        tests:
+          - not_null
+      - name: source_refs
+        description: "JSON containing referenced note sources"
+      - name: created_at
+        description: "Timestamp when message was sent"
+
+  - name: stg_note_vectors_agg
+    description: "Aggregated note vector embeddings from all user schemas"
+    columns:
+      - name: vector_id
+        description: "Primary key for vector embeddings"
+        tests:
+          - not_null
+      - name: audio_key
+        description: "Foreign key to audios table"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_audios_agg')
+              field: audio_key
+      - name: content_chunk
+        description: "Text chunk used for embedding"
+        tests:
+          - not_null
+      - name: embedding
+        description: "JSON containing vector embedding"
+        tests:
+          - not_null
+      - name: created_at
+        description: "Timestamp when vector was created"
+      - name: deleted_at
+        description: "Soft delete timestamp"
+
+  - name: stg_users
+    description: "User accounts table"
+    columns:
+      - name: user_id
+        description: "Primary key for users"
+        tests:
+          - unique
+          - not_null
+      - name: username
+        description: "Unique username"
+        tests:
+          - unique
+          - not_null
+      - name: hashed_password
+        description: "Bcrypt hashed password"
+        tests:
+          - not_null
+      - name: created_at
+        description: "Account creation timestamp"
+      - name: reset_token
+        description: "Password reset token"
+      - name: reset_token_expires
+        description: "Password reset token expiration"
+
+  - name: stg_sessions
+    description: "User login sessions"
+    columns:
+      - name: session_id
+        description: "Primary key for sessions"
+        tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: "Foreign key to users table"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_users')
+              field: user_id
+      - name: expires_at
+        description: "Session expiration timestamp"
+        tests:
+          - not_null
+      - name: deleted_at
+        description: "Soft delete timestamp"

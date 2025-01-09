@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: int_audios
+    description: "Cleaned and transformed audio metadata with standardized units"
+    columns:
+      - name: audio_key
+        description: "Unique identifier for audio file"
+        tests:
+          - unique
+          - not_null
+      - name: audio_type
+        description: "Type of audio (recorded/uploaded)"
+        tests:
+          - accepted_values:
+              values: ['recorded', 'uploaded']
+      - name: audio_size
+        description: "Size of audio file in megabytes (MB)"
+        tests:
+          - not_null
+      - name: audio_duration
+        description: "Duration of audio in minutes"
+        tests:
+          - not_null
+      - name: audio_format
+        description: "Audio file format (mp3, wav, webm)"
+        tests:
+          - accepted_values:
+              values: ['mp3', 'wav', 'webm']
+      - name: audio_conversion_status
+        description: "Status of audio compression process"
+        tests:
+          - accepted_values:
+              values: ['reencoded', 'converted']
+      - name: created_at
+        description: "Timestamp when audio was created"
+        tests:
+          - not_null
+
+  - name: int_transcripts
+    description: "Parsed transcript JSON into structured columns"
+    columns:
+      - name: audio_key
+        description: "Foreign key to audios table"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('int_audios')
+              field: audio_key
+      - name: note_title
+        description: "AI-generated title for the note"
+        tests:
+          - not_null
+      - name: note_summary
+        description: "AI-generated summary of the transcript"
+        tests:
+          - not_null
+      - name: note_transcript
+        description: "Full text transcription of the audio"
+        tests:
+          - not_null
+      - name: created_at
+        description: "Timestamp when transcript was created"
+        tests:
+          - not_null

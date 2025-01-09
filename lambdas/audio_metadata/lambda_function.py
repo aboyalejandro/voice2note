@@ -116,7 +116,11 @@ def lambda_handler(event, context):
         # Save metadata JSON to S3
         metadata_s3_key = f"user_{user_id}/audios/metadata/{audio_key}.json"
         save_metadata_to_s3(
-            f"user_{user_id}", complete_metadata, bucket_name, metadata_s3_key
+            s3_client,
+            f"user_{user_id}",
+            complete_metadata,
+            bucket_name,
+            metadata_s3_key,
         )
 
         return {

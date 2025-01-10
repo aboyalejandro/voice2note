@@ -906,4 +906,5 @@ def chat_detail(request: Request, chat_id: str):
     )
 
 
-serve()
+port = int(os.environ.get("PORT", 5000))
+serve(port=port, host="0.0.0.0")

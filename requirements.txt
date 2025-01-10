@@ -1,3 +1,4 @@
+gunicorn
 python-fasthtml 
 boto3 
 psycopg2-binary

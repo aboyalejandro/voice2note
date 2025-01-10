@@ -5,11 +5,10 @@ __pycache___/
 plan.md
 plan_.md
 recap.md
-cleanup_s3_paths
-/dbt/target/
-/dbt/logs/
-/dbt/user.yml
-/dbt/package-lock.yml
-Dockerfile
-/logs/
+./dbt/target/
+./dbt/logs/
+./dbt/user.yml
+./dbt/package-lock.yml
+.Dockerfile
+./logs/
 .DS_Store

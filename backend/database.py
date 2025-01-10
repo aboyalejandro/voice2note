@@ -241,7 +241,14 @@ class DatabaseManager:
                     """
                     )
 
-                    # Step 8: Set up default privileges for future tables
+                    # Step 8: Add privileges to dbt_analytics
+                    cur.execute(
+                        f"""
+                        GRANT SELECT ON ALL TABLES IN SCHEMA {schema_name} TO dbt_analytics;
+                    """
+                    )
+
+                    # Step 9: Set up default privileges for future tables
                     cur.execute(
                         f"""
                         ALTER DEFAULT PRIVILEGES IN SCHEMA {schema_name} 
@@ -251,7 +258,7 @@ class DatabaseManager:
                     """
                     )
 
-                    # Step 9: Grant Lambda permissions last
+                    # Step 10: Grant Lambda permissions last
                     cur.execute(
                         f"""
                         GRANT USAGE ON SCHEMA {schema_name} TO aws_lambda;

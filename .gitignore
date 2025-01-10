@@ -10,3 +10,6 @@ cleanup_s3_paths
 /dbt/logs/
 /dbt/user.yml
 /dbt/package-lock.yml
+Dockerfile
+/logs/
+.DS_Store

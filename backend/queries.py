@@ -30,8 +30,16 @@ def _get_notes(schema: str) -> str:
             'note' as content_type,
             audios.audio_key as content_id,
             TO_CHAR(audios.created_at, 'MM/DD') as created_date,
-            COALESCE(transcription->>'note_title','Transcribing note...') as title,
-            COALESCE(transcription->>'summary_text','Your audio is being transcribed. It will show up in here when is finished.') as preview,
+            CASE
+                WHEN transcripts.transcription IS NULL THEN 'Transcribing note...'
+                WHEN transcripts.transcription->>'note_title' IS NULL THEN 'Processing title...'
+                ELSE transcripts.transcription->>'note_title'
+            END as title,
+            CASE
+                WHEN transcripts.transcription IS NULL THEN 'Your audio is being transcribed. It will show up in here when finished.'
+                WHEN transcripts.transcription->>'summary_text' IS NULL THEN 'Generating summary...'
+                ELSE transcripts.transcription->>'summary_text'
+            END as preview,
             CASE 
                 WHEN metadata->>'duration' is null or metadata->>'duration' = 'N/A' 
                 THEN '...' 

@@ -35,10 +35,10 @@ ENV/
 *.swo
 
 # DBT
-dbt/target/
-dbt/dbt_packages/
-dbt/logs/
-dbt/profiles.yml
+/dbt/target/
+/dbt/dbt_packages/
+/dbt/logs/
+/dbt/profiles.yml
 
 # Project specific
 plan_.md

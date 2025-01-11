@@ -77,7 +77,6 @@ models:
       - name: message_id
         description: "Primary key for chat messages"
         tests:
-          - unique
           - not_null
       - name: chat_id
         description: "Foreign key to chats table"

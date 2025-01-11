@@ -36,17 +36,34 @@ class DatabaseManager:
                     self.db_config.create_user_pool(user_id, hashed_password)
 
     @staticmethod
-    def validate_schema(schema: str) -> str:
-        """Validate schema name format"""
-        if not schema.startswith("user_") or not schema.replace("user_", "").isdigit():
-            raise ValueError("Invalid schema")
-        return schema
+    def validate_schema(schema: str) -> Optional[str]:
+        """
+        Validate schema name format.
+        Returns None if schema is invalid or missing.
+        """
+        if not schema or not isinstance(schema, str):
+            return None
+
+        try:
+            if (
+                not schema.startswith("user_")
+                or not schema.replace("user_", "").isdigit()
+            ):
+                return None
+            return schema
+        except Exception:
+            return None
 
     @staticmethod
-    def get_schema_id(schema: str) -> int:
+    def get_schema_id(schema: str) -> Optional[int]:
         """Extract user ID from schema name"""
-        schema = DatabaseManager.validate_schema(schema)
-        return int(schema.replace("user_", ""))
+        try:
+            schema = DatabaseManager.validate_schema(schema)
+            if not schema:
+                return None
+            return int(schema.replace("user_", ""))
+        except Exception:
+            return None
 
     @contextmanager
     def get_connection(self, user_id: Optional[int] = None):
@@ -70,6 +87,8 @@ class DatabaseManager:
     @contextmanager
     def get_schema_connection(self, schema: str):
         """Get connection for a specific schema"""
+        if not schema:
+            raise HTTPException(status_code=401, detail="Not authenticated")
         user_id = self.get_schema_id(schema)
         with self.get_connection(user_id) as conn:
             yield conn

@@ -37,22 +37,37 @@ class QueryCache:
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379/0",
-        memory_maxsize: int = 100,
-        memory_ttl: int = 60,
+        memory_maxsize: int = 1000,
+        memory_ttl: int = 300,
     ):
         """Initialize cache with fallback to memory-only if Redis is unavailable."""
         # Setup Redis connection
         self.redis = None
-        try:
-            self.redis = redis.from_url(redis_url)
-            self.redis.ping()  # Test connection
-            logger.info("Redis cache initialized")
-        except Exception as e:
-            logger.warning(f"Redis unavailable, falling back to memory-only cache: {e}")
+        self.redis_url = redis_url
 
-        # Setup in-memory TTL cache
+        # Increased memory cache size since we might be memory-only
         self.memory_cache = TTLCache(maxsize=memory_maxsize, ttl=memory_ttl)
         self.default_timeout = 300
+
+        # Try to connect to Redis
+        self._connect_redis()
+
+    def _connect_redis(self):
+        """Attempt to connect to Redis with timeout"""
+        try:
+            self.redis = redis.from_url(
+                self.redis_url,
+                socket_connect_timeout=2,  # 2 second timeout
+                socket_timeout=2,
+                retry_on_timeout=True,
+            )
+            self.redis.ping()
+            logger.info("Redis cache initialized")
+        except Exception as e:
+            logger.warning(
+                f"Redis unavailable at {self.redis_url}, using memory-only cache: {e}"
+            )
+            self.redis = None
 
     def make_key(self, *args, **kwargs) -> str:
         """Generate a unique cache key from arguments"""

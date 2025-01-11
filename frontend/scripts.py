@@ -328,7 +328,7 @@ class Scripts:
                         try {
                             playBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
                             
-                            const response = await fetch(`/get-audio/${audioKey}`);
+                            const response = await fetch(`/api/get-audio/${audioKey}`);
                             if (!response.ok) throw new Error('Failed to fetch audio');
                             
                             const blob = await response.blob();

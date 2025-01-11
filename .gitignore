@@ -35,18 +35,12 @@ ENV/
 *.swo
 
 # DBT
-<<<<<<< HEAD
-dbt/target/
-dbt/dbt_packages/
-dbt/logs/
-dbt/profiles.yml
-=======
 /dbt/target/
 /dbt/dbt_packages/
 /dbt/logs/
 /dbt/profiles.yml
 /dbt/package-lock.yml
->>>>>>> 5844aaa (update gitignore)
+/dbt/.user.yml
 
 # Project specific
 plan.md

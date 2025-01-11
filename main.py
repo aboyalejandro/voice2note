@@ -22,6 +22,7 @@ from backend.database import DatabaseManager
 from backend.queries import (
     get_notes_with_cache,
     get_note_detail_with_cache,
+    invalidate_note_cache,
 )
 from backend.api_routes import setup_api_routes
 from frontend.styles import Styles
@@ -37,7 +38,6 @@ styles = Styles()
 # Initialize FastHTML app
 app, rt = fast_app()
 app = setup_api_routes(app, db)
-
 
 # Authentication Routes
 
@@ -438,6 +438,9 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
+    # Invalidate cache on page load
+    invalidate_note_cache(schema)
+
     # Use cached query with filters
     filters = {}
     if start_date:
@@ -606,6 +609,9 @@ def note_detail(request: Request, audio_key: str):
     schema = db.validate_schema(request.cookies.get("schema"))
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
+
+    # Invalidate cache on page load
+    invalidate_note_cache(schema, audio_key)
 
     # Use cached query
     note = get_note_detail_with_cache(schema, audio_key)

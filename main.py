@@ -19,7 +19,10 @@ The application architecture:
 from fasthtml.common import *
 from backend.config import db_config
 from backend.database import DatabaseManager
-from backend.queries import get_notes, get_note_detail
+from backend.queries import (
+    get_notes_with_cache,
+    get_note_detail_with_cache,
+)
 from backend.api_routes import setup_api_routes
 from frontend.styles import Styles
 from frontend.scripts import Scripts
@@ -435,47 +438,18 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Use schema connection from pool
-    with db.get_schema_connection(schema) as conn:
-        with conn.cursor() as cur:
-            # Build query based on filters
-            query = get_notes(schema)
-            query_params = []
+    # Use cached query with filters
+    filters = {}
+    if start_date:
+        filters["start_date"] = start_date
+    if end_date:
+        filters["end_date"] = end_date
+    if keyword:
+        filters["keyword"] = keyword
 
-            # Add date filtering if dates are provided
-            if start_date or end_date:
-                query += " WHERE DATE(sort_date)"
-                if start_date and end_date:
-                    query += " BETWEEN %s AND %s"
-                    query_params.extend([start_date, end_date])
-                elif start_date:
-                    query += " >= %s"
-                    query_params.append(start_date)
-                elif end_date:
-                    query += " <= %s"
-                    query_params.append(end_date)
+    items = get_notes_with_cache(schema, filters)
 
-            # Add keyword search if provided
-            if keyword:
-                keyword_condition = f"""
-                {' WHERE ' if not (start_date or end_date) else ' AND '}(
-                    title ILIKE %s 
-                    OR preview ILIKE %s
-                    OR content_id IN (
-                        SELECT chat_id 
-                        FROM {schema}.chat_messages 
-                        WHERE content ILIKE %s
-                    )
-                )"""
-                query += keyword_condition
-                query_params.extend([f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"])
-
-            query += " ORDER BY sort_date DESC"
-
-            cur.execute(query, query_params)
-            items = cur.fetchall()
-
-    # Create search form with both date and keyword fields
+    # Create search form with original styling
     search_form = Div(
         Form(
             Div(
@@ -633,19 +607,10 @@ def note_detail(request: Request, audio_key: str):
     if not schema:
         return RedirectResponse(url="/login", status_code=303)
 
-    # Use schema connection from pool
-    with db.get_schema_connection(schema) as conn:
-        with conn.cursor() as cur:
-            # Query note details in user's schema
-            cur.execute(
-                get_note_detail(schema),
-                (audio_key,),
-            )
-            note = cur.fetchone()
-
-            # Handle note not found
-            if not note:
-                raise HTTPException(status_code=404, detail="Note not found")
+    # Use cached query
+    note = get_note_detail_with_cache(schema, audio_key)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
 
     return Html(
         Head(

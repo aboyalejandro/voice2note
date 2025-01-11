@@ -449,30 +449,56 @@ def notes(request, start_date: str = None, end_date: str = None, keyword: str = 
 
     items = get_notes_with_cache(schema, filters)
 
-    # Create search form
-    search_form = Form(
-        Input(
-            type="text",
-            name="keyword",
-            placeholder="Search notes...",
-            value=keyword or "",
-            cls="search-input",
+    # Create search form with original styling
+    search_form = Div(
+        Form(
+            Div(
+                Div(
+                    I(cls="fas fa-calendar", style="color: navy;"),
+                    "From: ",
+                    Input(
+                        type="date",
+                        name="start_date",
+                        cls="date-input",
+                        value=start_date or "",
+                        title="From date",
+                    ),
+                    "To: ",
+                    Input(
+                        type="date",
+                        name="end_date",
+                        cls="date-input",
+                        value=end_date or "",
+                        title="To date",
+                    ),
+                    cls="date-field",
+                ),
+                Div(
+                    Input(
+                        type="text",
+                        name="keyword",
+                        cls="keyword-input",
+                        value=keyword or "",
+                        placeholder="Search in notes...",
+                    ),
+                    cls="keyword-field",
+                ),
+                Div(
+                    Button(I(cls="fas fa-search"), type="submit", cls="search-btn"),
+                    Button(
+                        I(cls="fas fa-times"),
+                        type="button",
+                        cls="clear-btn",
+                        onclick="clearSearch()",
+                    ),
+                    cls="button-field",
+                ),
+                cls="search-container",
+            ),
+            method="GET",
+            cls="search-form",
         ),
-        Input(
-            type="date",
-            name="start_date",
-            value=start_date or "",
-            cls="date-input",
-        ),
-        Input(
-            type="date",
-            name="end_date",
-            value=end_date or "",
-            cls="date-input",
-        ),
-        Button("Search", type="submit", cls="search-btn"),
-        method="GET",
-        cls="search-form",
+        cls="search-wrapper",
     )
 
     content_cards = [

@@ -11,31 +11,18 @@ The module uses PostgreSQL for data storage and follows a multi-schema
 architecture where each user gets their own schema for isolation.
 """
 
+from backend.cache import QueryCache
+from backend.config import REDIS_URL, logger, db_config
+from backend.database import DatabaseManager
 
-def get_notes(schema: str) -> str:
-    """
-    Generate SQL query to fetch all notes and chats for a user.
+db = DatabaseManager(db_config)
 
-    Creates a unified view combining:
-    - Audio notes with their transcriptions and metadata
-    - Chat conversations with message previews
+# Initialize cache with 5 minute default timeout
+cache = QueryCache(redis_url=REDIS_URL)
 
-    Results are formatted consistently for display in the notes list,
-    with common fields like title, preview text, and duration/message count.
 
-    Args:
-        schema (str): User's schema name
-
-    Returns:
-        str: SQL query string that returns:
-            - content_type: 'note' or 'chat'
-            - content_id: audio_key or chat_id
-            - created_date: formatted date
-            - title: note title or chat title
-            - preview: transcript summary or first message
-            - duration: audio duration or message count
-            - sort_date: for ordering
-    """
+def _get_notes(schema: str) -> str:
+    """Internal: Generate base SQL for notes list."""
     return f"""
         WITH unified_content AS (
         -- Audio notes
@@ -83,26 +70,8 @@ def get_notes(schema: str) -> str:
     """
 
 
-def get_note_detail(schema: str) -> str:
-    """
-    Generate SQL query to fetch details of a specific note.
-
-    Retrieves complete note information including:
-    - Audio metadata
-    - Transcription content
-    - Note title
-    - Creation date
-
-    Args:
-        schema (str): User's schema name
-
-    Returns:
-        str: SQL query string that expects an audio_key parameter and returns:
-            - audio_key: Unique identifier
-            - note_date: Formatted creation date
-            - note_title: Title from transcription
-            - note_transcription: Full transcription text
-    """
+def _get_note_detail(schema: str) -> str:
+    """Internal: Generate base SQL for note detail."""
     return f"""
         SELECT 
             audios.audio_key,
@@ -114,3 +83,81 @@ def get_note_detail(schema: str) -> str:
         WHERE audios.audio_key = %s
         AND audios.deleted_at IS NULL
     """
+
+
+def get_notes_with_cache(schema: str, filters: dict = None) -> list:
+    """Get notes list with caching support."""
+    if not filters:  # Only cache when no filters are applied
+        cache_key = f"notes:{schema}"
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            logger.info(f"Cache hit for notes:{schema}")
+            return cached_result
+
+    # Execute query
+    query = _get_notes(schema)
+
+    # Add filters if present
+    params = []
+    if filters:
+        conditions = []
+        if filters.get("start_date"):
+            conditions.append("DATE(sort_date) >= %s")
+            params.append(filters["start_date"])
+        if filters.get("end_date"):
+            conditions.append("DATE(sort_date) <= %s")
+            params.append(filters["end_date"])
+        if filters.get("keyword"):
+            conditions.append("(title ILIKE %s OR preview ILIKE %s)")
+            params.extend([f"%{filters['keyword']}%", f"%{filters['keyword']}%"])
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+    query += " ORDER BY sort_date DESC"
+
+    # Execute query and cache result if no filters
+    with db.get_schema_connection(schema) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            result = cur.fetchall()
+
+            if not filters:  # Only cache when no filters
+                cache.set(cache_key, result)
+                logger.info(f"Cached notes for {schema}")
+
+            return result
+
+
+def get_note_detail_with_cache(schema: str, audio_key: str) -> dict:
+    """Get note detail with caching support."""
+    cache_key = f"note:{schema}:{audio_key}"
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        logger.info(f"Cache hit for note:{schema}:{audio_key}")
+        return cached_result
+
+    # Execute query
+    query = _get_note_detail(schema)
+    with db.get_schema_connection(schema) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (audio_key,))
+            result = cur.fetchone()
+            if result:
+                cache.set(cache_key, result)
+                logger.info(f"Cached note detail for {audio_key}")
+            return result
+
+
+def invalidate_note_cache(schema: str, audio_key: str = None):
+    """
+    Invalidate cache when notes are modified.
+    """
+    # Always invalidate notes list
+    cache.delete(f"notes:{schema}")
+    logger.info(f"Invalidated notes cache for {schema}")
+
+    # Invalidate specific note if provided
+    if audio_key:
+        cache.delete(f"note:{schema}:{audio_key}")
+        logger.info(f"Invalidated note cache for {audio_key}")

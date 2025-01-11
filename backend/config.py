@@ -100,3 +100,6 @@ AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET")
 
 # LLM
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Redis
+REDIS_URL = os.getenv("REDIS_URL")

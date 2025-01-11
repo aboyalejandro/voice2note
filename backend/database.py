@@ -264,6 +264,7 @@ class DatabaseManager:
                     cur.execute(
                         f"""
                         GRANT SELECT ON ALL TABLES IN SCHEMA {schema_name} TO dbt_analytics;
+                        GRANT USAGE ON SCHEMA {schema_name} TO dbt_analytics;
                     """
                     )
 

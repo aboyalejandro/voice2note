@@ -42,4 +42,5 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA analytics GRANT SELECT ON TABLES TO airbyte;
 
 -- Setup dbt_analytics user
 GRANT CONNECT ON DATABASE voice2note TO dbt_analytics;
-GRANT USAGE  public TO dbt_analytics;
+GRANT USAGE ON SCHEMA public TO dbt_analytics;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO dbt_analytics;

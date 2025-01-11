@@ -22,6 +22,7 @@ from backend.config import logger, s3, AWS_S3_BUCKET
 from backend.llm import LLM, RateLimiter
 import json
 import io
+from backend.queries import invalidate_note_cache
 
 # Initialize LLM
 rate_limiter = RateLimiter(max_requests=5, window=60)
@@ -748,6 +749,8 @@ def setup_api_routes(app, db):
                     conn.commit()
                     logger.info(f"Updated note content for audio_key {audio_key}")
 
+                    # Invalidate cache after successful edit
+                    invalidate_note_cache(schema, audio_key)
                     return JSONResponse(
                         {
                             "success": True,

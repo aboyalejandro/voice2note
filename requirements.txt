@@ -7,3 +7,5 @@ sqlite_minutils
 bcrypt
 openai
 numpy
+redis 
+cachetools

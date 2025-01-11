@@ -1,14 +1,48 @@
-venv
-__pycache___/
+# Environment variables
 .env
-.sesskey
-plan.md
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# DBT
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/profiles.yml
+
+# Project specific
 plan_.md
 recap.md
-./dbt/target/
-./dbt/logs/
-./dbt/user.yml
-./dbt/package-lock.yml
-.Dockerfile
-./logs/
-.DS_Store
+
+# Logs
+*.log

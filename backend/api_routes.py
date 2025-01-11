@@ -390,9 +390,18 @@ def setup_api_routes(app, db):
                         INSERT INTO {schema}.chats (chat_id, title)
                         VALUES (%s, %s)
                         ON CONFLICT (chat_id) DO NOTHING
+                        RETURNING chat_id
                         """,
                         (chat_id, "New Chat"),
                     )
+
+                    # If a new chat was created (not conflict)
+                    if cur.fetchone():
+                        # Invalidate notes cache for new chat
+                        invalidate_note_cache(schema)
+                        logger.info(
+                            f"Notes cache invalidated for {schema} after new chat creation"
+                        )
 
                     # Find relevant context from user's notes
                     relevant_chunks = llm.find_relevant_context(schema, cur, message)
@@ -540,6 +549,13 @@ def setup_api_routes(app, db):
                     )
 
                     conn.commit()
+
+                    # Invalidate notes cache after successful deletion
+                    invalidate_note_cache(schema)
+                    logger.info(
+                        f"Notes cache invalidated for {schema} after chat deletion"
+                    )
+
                     return {"success": True}
 
         except HTTPException:
@@ -689,6 +705,10 @@ def setup_api_routes(app, db):
             s3.upload_fileobj(audio_file.file, AWS_S3_BUCKET, s3_key)
             logger.info(f"Audio file uploaded to S3: {s3_key}")
 
+            # Invalidate notes cache after successful save
+            invalidate_note_cache(schema)
+            logger.info(f"Notes cache invalidated for {schema} after new audio save")
+
             return {"audio_key": audio_key}
 
         except Exception as e:
@@ -812,6 +832,9 @@ def setup_api_routes(app, db):
                     )
 
                     conn.commit()
+
+                    # Invalidate cache after successful deletion
+                    invalidate_note_cache(schema, audio_key)
 
                     logger.info(
                         f"Removed audio, transcript and vector embedding for audio_key {audio_key}."

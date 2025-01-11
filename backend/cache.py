@@ -148,17 +148,21 @@ class QueryCache:
 
         # Delete from memory
         try:
-            del self.memory_cache[key]
+            if key in self.memory_cache:
+                del self.memory_cache[key]
+                logger.debug(f"Deleted {key} from memory cache")
         except Exception as e:
-            logger.warning(f"Error deleting from memory cache: {e}")
+            logger.debug(f"Key {key} not found in memory cache")
             success = False
 
         # Delete from Redis
-        try:
-            self.redis.delete(key)
-        except Exception as e:
-            logger.warning(f"Error deleting from Redis cache: {e}")
-            success = False
+        if self.redis:
+            try:
+                self.redis.delete(key)
+                logger.debug(f"Deleted {key} from Redis cache")
+            except Exception as e:
+                logger.debug(f"Key {key} not found in Redis cache")
+                success = False
 
         return success
 

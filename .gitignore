@@ -38,7 +38,6 @@ ENV/
 /dbt/target/
 /dbt/dbt_packages/
 /dbt/logs/
-/dbt/profiles.yml
 /dbt/package-lock.yml
 /dbt/.user.yml
 

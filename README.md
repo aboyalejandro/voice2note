@@ -3,6 +3,7 @@
 Voice2Note is an AI-powered web application that transforms your voice recordings into organized, searchable notes. For anyone who prefers speaking over typing, Voice2Note helps you save time by keeping your thoughts organized.
 
 ## Airbyte & Motherduck Hackathon Section 🎉 
+- Check a 5' project demo in here: [Loom with Voice2Note Demo](https://www.loom.com/share/3ba46813eab74b7483791673eca72a76?sid=bf53c1c2-e035-4a73-9101-55e56f12cb0d)
 - There's a special user for Airbyte & Motherduck, you can login in [Voice2Note](https://voice2note.up.railway.app/login) with the following credentials:
   - Username: `airbyte_motherduck`
   - Password: `hackathon`

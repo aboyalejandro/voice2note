@@ -1,5 +1,5 @@
 voice2note:
-  target: prod
+  target: dev
   outputs:
     dev:
       type: postgres
